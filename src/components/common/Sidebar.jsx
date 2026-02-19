@@ -12,7 +12,8 @@ const Sidebar = () => {
         <>
           <Link to="/admin/dashboard">Dashboard</Link><br/>
           <Link to="/admin/projects">Projects</Link><br/>
-          <Link to="/admin/payouts">Payouts</Link>
+          <Link to="/admin/payouts">Payouts</Link><br/>
+          <Link to="/admin/payout-history">Payout History</Link>
         </>
       )}
 

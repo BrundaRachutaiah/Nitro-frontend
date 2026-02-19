@@ -21,6 +21,7 @@ import UploadSection from "./pages/participant/UploadSection";
 import RecentHistory from "./pages/participant/RecentHistory";
 import Verification from "./pages/admin/Verification";
 import Payouts from "./pages/admin/Payouts";
+import PayoutHistory from "./pages/admin/PayoutHistory";
 import CreateBatch from "./pages/admin/CreateBatch";
 import ApplicationApprovals from "./pages/admin/ApplicationApprovals";
 import LoginRequests from "./pages/admin/LoginRequests";
@@ -505,6 +506,14 @@ function App() {
         element={(
           <RoleRoute allowedRoles={["ADMIN", "SUPER_ADMIN"]}>
             <Payouts />
+          </RoleRoute>
+        )}
+      />
+      <Route
+        path="/admin/payout-history"
+        element={(
+          <RoleRoute allowedRoles={["ADMIN", "SUPER_ADMIN"]}>
+            <PayoutHistory />
           </RoleRoute>
         )}
       />

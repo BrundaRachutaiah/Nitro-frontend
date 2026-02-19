@@ -139,6 +139,7 @@ const Dashboard = () => {
       { key: "projects", label: "Projects", icon: "projects", ref: projectsRef, path: "/projects/manage" },
       { key: "approvals", label: "Approvals", icon: "approvals", ref: overviewRef, path: "/admin/applications" },
       { key: "payouts", label: "Payouts", icon: "payouts", ref: activityRef, path: "/admin/payouts" },
+      { key: "payout_history", label: "Payout History", icon: "reports", ref: activityRef, path: "/admin/payout-history" },
       { key: "reports", label: "Reports", icon: "reports", ref: reportsRef, path: "/super-admin/reports" },
       { key: "support", label: "Support", icon: "support", ref: supportRef, path: "/super-admin/support" }
     ],

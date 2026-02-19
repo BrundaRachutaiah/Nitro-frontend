@@ -144,6 +144,16 @@ const Dashboard = () => {
                 <span className="admin-nav-main"><span>Application Approvals</span></span>
               </button>
             </li>
+            <li>
+              <button type="button" className="admin-nav-btn" onClick={() => navigate("/admin/payouts")}>
+                <span className="admin-nav-main"><span>Payouts</span></span>
+              </button>
+            </li>
+            <li>
+              <button type="button" className="admin-nav-btn" onClick={() => navigate("/admin/payout-history")}>
+                <span className="admin-nav-main"><span>Payout History</span></span>
+              </button>
+            </li>
           </ul>
           <button
             type="button"

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   createBatch,
+  exportBatchesCSV,
   exportBatchCSV,
   getBatches,
   getEligiblePayouts,
@@ -33,6 +34,45 @@ const withClientTimeout = (promise, label, timeoutMs = 15000) =>
       });
   });
 
+const normalizeBatchStatus = (value) => {
+  const status = String(value || "").toUpperCase();
+  // Older/newer backend rows may store this state as PENDING.
+  if (status === "PENDING") return "IN_BATCH";
+  return status;
+};
+
+const getFilteredBatchesByStatus = (rows, statusFilter) => {
+  if (statusFilter === "ALL") return rows;
+  return rows.filter((row) => normalizeBatchStatus(row?.status) === statusFilter);
+};
+
+const getPrimaryParticipant = (batch) => {
+  const rows = Array.isArray(batch?.participants) ? batch.participants : [];
+  return rows[0] || null;
+};
+
+const formatAddress = (participant) => {
+  if (!participant) return "-";
+  const parts = [
+    participant.address_line1,
+    participant.address_line2,
+    participant.city,
+    participant.state,
+    participant.pincode,
+    participant.country
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : "-";
+};
+
+const formatParticipantLabel = (batch) => {
+  const rows = Array.isArray(batch?.participants) ? batch.participants : [];
+  if (!rows.length) return "-";
+  const first = rows[0];
+  const firstLabel = first?.full_name || first?.email || "-";
+  if (rows.length === 1) return firstLabel;
+  return `${firstLabel} +${rows.length - 1} more`;
+};
+
 const Payouts = () => {
   const navigate = useNavigate();
   const [batches, setBatches] = useState([]);
@@ -48,7 +88,7 @@ const Payouts = () => {
     setSuccess("");
     setLoading(true);
     const [batchRes, eligibleRes] = await Promise.allSettled([
-      withClientTimeout(getBatches(), "Payout batches"),
+      withClientTimeout(getBatches({ status: "ACTIVE", limit: 200 }), "Payout batches"),
       withClientTimeout(getEligiblePayouts(), "Eligible payouts")
     ]);
 
@@ -130,24 +170,56 @@ const Payouts = () => {
     }
   };
 
+  const handleExportFiltered = async () => {
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      const exportStatus = batchStatusFilter === "ALL" ? "ACTIVE" : batchStatusFilter;
+      const res = await exportBatchesCSV({
+        status: exportStatus
+      });
+      const blob = new Blob([res.data], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const suffix = batchStatusFilter === "ALL" ? "all" : batchStatusFilter.toLowerCase();
+      link.href = url;
+      link.download = `payout_batches_${suffix}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setSuccess("Filtered payout batches exported successfully.");
+      await loadData();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to export filtered payout batches.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, []);
 
   const filteredBatches = useMemo(() => {
-    if (batchStatusFilter === "ALL") return batches;
-    return batches.filter((row) => String(row?.status || "").toUpperCase() === batchStatusFilter);
+    return getFilteredBatchesByStatus(batches, batchStatusFilter);
   }, [batches, batchStatusFilter]);
+
+  const showActionsColumn = useMemo(() => {
+    return filteredBatches.some((batch) => normalizeBatchStatus(batch?.status) !== "PAID");
+  }, [filteredBatches]);
 
   return (
     <div className="admin-page">
       <div className="admin-page-head">
         <div>
           <h1>Payout Batches</h1>
-          <p>Review eligible payouts, create payout batches, export and mark paid</p>
+          <p>Review eligible payouts, create payout batches, export and mark paid.</p>
         </div>
         <div className="admin-head-actions">
           <button className="admin-btn" onClick={() => navigate("/dashboard")}>Back</button>
+          <button className="admin-btn" onClick={() => navigate("/admin/payout-history")}>Payout History</button>
           <button className="admin-btn" onClick={loadData} disabled={saving}>Refresh</button>
           <button className="admin-btn primary" onClick={handleCreateBatch} disabled={saving || loading || !eligibleRows.length}>
             + Create Batch
@@ -206,8 +278,10 @@ const Payouts = () => {
             <option value="ALL">All</option>
             <option value="IN_BATCH">In Batch</option>
             <option value="EXPORTED">Exported</option>
-            <option value="PAID">Paid</option>
           </select>
+          <button className="admin-btn" onClick={handleExportFiltered} disabled={saving || loading || !filteredBatches.length}>
+            Export Filtered
+          </button>
         </div>
         {loading ? <p>Loading payout batches...</p> : null}
         {!loading && !filteredBatches.length ? <p className="admin-empty">No payout batches found.</p> : null}
@@ -216,32 +290,48 @@ const Payouts = () => {
             <thead>
               <tr>
                 <th>Batch ID</th>
+                <th>Participant</th>
+                <th>Account Number</th>
+                <th>IFSC</th>
+                <th>Address</th>
                 <th>Total Amount</th>
                 <th>Status</th>
                 <th>Created</th>
-                <th>Actions</th>
+                {showActionsColumn ? <th>Actions</th> : null}
               </tr>
             </thead>
             <tbody>
               {filteredBatches.map((batch) => {
-                const status = String(batch?.status || "").toUpperCase();
+                const status = normalizeBatchStatus(batch?.status);
+                const canExport = status !== "PAID";
                 const canMarkPaid = status === "IN_BATCH" || status === "EXPORTED";
+                const primaryParticipant = getPrimaryParticipant(batch);
                 return (
                   <tr key={batch.id}>
                     <td>{batch.id}</td>
+                    <td title={formatParticipantLabel(batch)}>{formatParticipantLabel(batch)}</td>
+                    <td>{primaryParticipant?.bank_account_number || "-"}</td>
+                    <td>{primaryParticipant?.bank_ifsc || "-"}</td>
+                    <td title={formatAddress(primaryParticipant)}>{formatAddress(primaryParticipant)}</td>
                     <td>{formatCurrency(batch.total_amount)}</td>
                     <td><span className={`admin-badge ${status.toLowerCase()}`}>{status || "-"}</span></td>
                     <td>{batch?.created_at ? new Date(batch.created_at).toLocaleString() : "-"}</td>
-                    <td>
-                      <div className="admin-actions">
-                        <button className="admin-btn" onClick={() => handleExport(batch.id)} disabled={saving}>
-                          Export CSV
-                        </button>
-                        <button className="admin-btn" onClick={() => handleMarkPaid(batch.id)} disabled={saving || !canMarkPaid}>
-                          Mark Paid
-                        </button>
-                      </div>
-                    </td>
+                    {showActionsColumn ? (
+                      <td>
+                        <div className="admin-actions">
+                          {canExport ? (
+                            <button className="admin-btn" onClick={() => handleExport(batch.id)} disabled={saving}>
+                              Export CSV
+                            </button>
+                          ) : null}
+                          {canMarkPaid ? (
+                            <button className="admin-btn" onClick={() => handleMarkPaid(batch.id)} disabled={saving}>
+                              Mark Paid
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })}
