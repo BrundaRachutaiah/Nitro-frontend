@@ -1,0 +1,427 @@
+.allocation-page {
+  min-height: 100vh;
+  background: radial-gradient(circle at 14% 0%, #0a2f38 0%, #071f2c 42%, #061723 100%);
+  color: #e1f1f8;
+}
+
+.allocation-topbar {
+  height: 72px;
+  border-bottom: 1px solid rgba(37, 147, 179, 0.24);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.2rem;
+  background: rgba(5, 29, 37, 0.86);
+}
+
+.allocation-brand {
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.allocation-topbar nav {
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.allocation-topbar nav button {
+  border: 0;
+  background: transparent;
+  color: #9db7c2;
+  font-weight: 700;
+  padding: 0.5rem 0.8rem;
+  border-radius: 8px;
+}
+
+.allocation-topbar nav button.active {
+  color: #17d0f2;
+}
+
+.allocation-main-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.3rem;
+}
+
+.allocation-main-head h1 {
+  margin: 0;
+  font-size: clamp(2.1rem, 3.4vw, 3.2rem);
+}
+
+.allocation-main-head p {
+  margin: 0.4rem 0 0;
+  color: #9cb6c2;
+}
+
+.allocation-loading,
+.allocation-error {
+  margin-top: 1rem;
+}
+
+.allocation-error {
+  color: #ffb4b4;
+}
+
+.allocation-empty {
+  margin-top: 1rem;
+  border: 1px dashed rgba(47, 160, 194, 0.4);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.allocation-empty button {
+  border: 0;
+  border-radius: 10px;
+  height: 40px;
+  padding: 0 0.9rem;
+  background: #16b7df;
+  color: #fff;
+  font-weight: 700;
+}
+
+.allocation-switcher {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.7rem;
+}
+
+.allocation-switcher button {
+  border: 1px solid rgba(46, 154, 189, 0.35);
+  border-radius: 12px;
+  background: rgba(10, 40, 52, 0.78);
+  color: #d2e9f4;
+  text-align: left;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.allocation-switcher button span {
+  color: #89a9b6;
+  font-size: 0.82rem;
+}
+
+.allocation-switcher button.active {
+  border-color: #17c9ef;
+}
+
+.allocation-countdown {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.allocation-countdown div {
+  border: 1px solid rgba(132, 172, 199, 0.24);
+  border-radius: 12px;
+  background: rgba(22, 44, 58, 0.58);
+  text-align: center;
+  padding: 0.7rem 0.4rem;
+}
+
+.allocation-countdown strong {
+  display: block;
+  font-size: 2rem;
+  line-height: 1;
+  color: #24d2f2;
+}
+
+.allocation-countdown span {
+  display: block;
+  margin-top: 0.4rem;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: #91adbf;
+}
+
+.allocation-journey {
+  margin-top: 1rem;
+  border: 1px solid rgba(141, 176, 203, 0.2);
+  border-radius: 14px;
+  background: rgba(9, 27, 45, 0.58);
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.journey-step {
+  border: 1px solid rgba(141, 176, 203, 0.2);
+  border-radius: 10px;
+  background: rgba(14, 35, 52, 0.72);
+  padding: 0.7rem;
+}
+
+.journey-step h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.journey-step p {
+  margin: 0.25rem 0 0;
+  color: #95b4c3;
+}
+
+.journey-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.journey-choice-row {
+  margin-top: 0.6rem;
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.journey-choice-btn {
+  border: 1px solid rgba(141, 176, 203, 0.35);
+  background: rgba(14, 35, 52, 0.72);
+  color: #d2e9f4;
+  border-radius: 8px;
+  height: 32px;
+  min-width: 58px;
+  padding: 0 0.7rem;
+  font-weight: 700;
+}
+
+.journey-choice-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.journey-choice-btn.yes.is-selected {
+  background: rgba(35, 184, 128, 0.24);
+  border-color: rgba(35, 184, 128, 0.8);
+  color: #9ff1cf;
+}
+
+.journey-choice-btn.no.is-selected {
+  background: rgba(209, 85, 85, 0.2);
+  border-color: rgba(209, 85, 85, 0.7);
+  color: #ffc9c9;
+}
+
+.journey-step.done {
+  border-color: rgba(32, 214, 164, 0.45);
+}
+
+.journey-step.active {
+  border-color: rgba(8, 183, 220, 0.5);
+}
+
+.journey-step.locked {
+  opacity: 0.72;
+}
+
+.allocation-upload-card {
+  margin-top: 1rem;
+  border: 1px solid rgba(141, 176, 203, 0.24);
+  border-radius: 14px;
+  background: rgba(11, 33, 49, 0.8);
+  padding: 1rem;
+}
+
+.allocation-upload-card h2 {
+  margin: 0;
+  font-size: 1.8rem;
+}
+
+.allocation-upload-card p {
+  margin: 0.55rem 0 0;
+  color: #9cb6c2;
+}
+
+.allocation-actions {
+  margin-top: 0.9rem;
+  display: flex;
+  gap: 0.65rem;
+}
+
+.allocation-actions button {
+  border: 1px solid rgba(141, 176, 203, 0.35);
+  border-radius: 10px;
+  height: 44px;
+  padding: 0 0.95rem;
+  font-weight: 700;
+}
+
+.allocation-actions .primary {
+  background: #12afd3;
+  border-color: #12afd3;
+  color: #fff;
+  flex: 1;
+}
+
+.allocation-actions .secondary {
+  background: transparent;
+  color: #d6e8f3;
+}
+
+.allocation-detail-cards {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.allocation-track-list {
+  margin-top: 1rem;
+  border: 1px solid rgba(141, 176, 203, 0.24);
+  border-radius: 14px;
+  background: rgba(10, 34, 48, 0.82);
+  padding: 0.9rem;
+}
+
+.allocation-track-list h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.allocation-history-list {
+  margin-top: 1rem;
+}
+
+.allocation-history-note {
+  margin: 0.45rem 0 0;
+  color: #9cb6c2;
+}
+
+.allocation-track-table-wrap {
+  margin-top: 0.7rem;
+  overflow-x: auto;
+}
+
+.allocation-track-list table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+
+.allocation-track-list th,
+.allocation-track-list td {
+  padding: 0.65rem;
+  border-bottom: 1px solid rgba(141, 176, 203, 0.15);
+  text-align: left;
+}
+
+.allocation-track-list th {
+  color: #99b7c6;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.allocation-inline-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.allocation-inline-cell a {
+  color: #1fd1f1;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.allocation-inline-cell a:hover {
+  text-decoration: underline;
+}
+
+.status-chip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.status-reserved {
+  color: #082531;
+  background: #52c5e0;
+}
+
+.status-completed {
+  color: #0b2c20;
+  background: #4fd79d;
+}
+
+.status-purchased {
+  color: #05283a;
+  background: #69d8ff;
+}
+
+.status-expired {
+  color: #3d1a11;
+  background: #e0a66f;
+}
+
+.allocation-detail-cards article {
+  border: 1px solid rgba(141, 176, 203, 0.24);
+  border-radius: 14px;
+  background: rgba(10, 34, 48, 0.82);
+  padding: 0.9rem;
+}
+
+.allocation-detail-cards h3 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.allocation-detail-cards ul {
+  margin: 0.7rem 0 0;
+  padding-left: 1rem;
+  color: #9bb8c7;
+}
+
+.allocation-detail-cards p {
+  margin: 0.6rem 0 0;
+  color: #99b5c4;
+}
+
+.allocation-detail-cards .amount {
+  color: #15d2f4;
+  font-size: 2.4rem;
+  font-weight: 900;
+}
+
+.allocation-detail-cards button {
+  margin-top: 0.75rem;
+  border: 0;
+  background: transparent;
+  color: #20d3f2;
+  font-weight: 800;
+}
+
+@media (max-width: 980px) {
+  .allocation-topbar {
+    height: auto;
+    padding: 0.8rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .allocation-brand {
+    font-size: 1.65rem;
+  }
+
+  .allocation-countdown {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .allocation-actions {
+    flex-direction: column;
+  }
+
+  .allocation-detail-cards {
+    grid-template-columns: 1fr;
+  }
+}

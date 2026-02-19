@@ -1,0 +1,11 @@
+export const ROLES = {
+  SUPER_ADMIN: "SUPER_ADMIN",
+  ADMIN: "ADMIN",
+  BRAND: "BRAND",
+  PARTICIPANT: "PARTICIPANT",
+};
+
+export const MODES = {
+  MARKETPLACE: "MARKETPLACE",
+  D2C: "D2C",
+};

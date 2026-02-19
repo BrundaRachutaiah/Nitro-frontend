@@ -1,0 +1,261 @@
+.project-page {
+  padding: 24px;
+  background: #f3f6fa;
+  min-height: 100vh;
+}
+
+.project-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.project-head h1 {
+  margin: 0;
+  font-size: 42px;
+  line-height: 1.1;
+  color: #0d1b2a;
+}
+
+.project-head p {
+  margin: 6px 0 0;
+  color: #4a5f74;
+}
+
+.project-create-btn {
+  border: 0;
+  border-radius: 12px;
+  background: #14a7cc;
+  color: #fff;
+  font-weight: 700;
+  padding: 12px 18px;
+}
+
+.project-filters {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(170px, 220px) minmax(170px, 220px);
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+.project-filters input,
+.project-filters select {
+  height: 48px;
+  border: 1px solid #d4deea;
+  border-radius: 12px;
+  padding: 0 14px;
+  font-size: 16px;
+  background: #fff;
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.project-card {
+  background: #fff;
+  border: 1px solid #d5e0eb;
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.project-card.selected {
+  border-color: #14a7cc;
+  box-shadow: 0 0 0 2px rgba(20, 167, 204, 0.16);
+}
+
+.project-image {
+  height: 160px;
+  background: linear-gradient(135deg, #a6d9c8, #86accf);
+}
+
+.project-card-body {
+  padding: 14px;
+}
+
+.project-tag {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.project-tag.marketplace {
+  background: #d8ecff;
+  color: #2565ad;
+}
+
+.project-tag.d2c {
+  background: #e9d9ff;
+  color: #7a28b8;
+}
+
+.project-card h3 {
+  margin: 0 0 8px;
+  color: #102030;
+}
+
+.project-card p {
+  margin: 0 0 8px;
+  color: #4c5f72;
+}
+
+.project-error {
+  color: #b42318;
+  margin-bottom: 12px;
+}
+
+.project-loading {
+  color: #4a5f74;
+  margin-bottom: 12px;
+}
+
+.project-detail-panel {
+  margin-top: 22px;
+  background: #fff;
+  border: 1px solid #d5e0eb;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.project-detail-head h2 {
+  margin: 0;
+  color: #102030;
+}
+
+.project-detail-head p {
+  margin: 4px 0 0;
+  color: #4c5f72;
+}
+
+.project-detail-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.project-detail-grid p {
+  margin: 0;
+  color: #21374b;
+}
+
+.project-detail-description {
+  margin: 14px 0;
+  color: #3f566a;
+}
+
+.project-products-table-wrap h3 {
+  margin: 0 0 10px;
+  color: #102030;
+}
+
+.project-products-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.project-products-table th,
+.project-products-table td {
+  border-bottom: 1px solid #e3ebf4;
+  text-align: left;
+  padding: 10px 8px;
+}
+
+.project-products-table th {
+  color: #36516a;
+  font-size: 14px;
+}
+
+.project-products-table td {
+  color: #183047;
+}
+
+@media (max-width: 720px) {
+  .project-page {
+    padding: 14px;
+    background: radial-gradient(circle at 18% 0%, #0a3140 0%, #081f2c 45%, #071a25 100%);
+  }
+
+  .project-head {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .project-head h1 {
+    font-size: 38px;
+    color: #eef8ff;
+  }
+
+  .project-head p {
+    color: #9db7c8;
+  }
+
+  .project-create-btn {
+    height: 42px;
+    padding: 0 14px;
+    border-radius: 12px;
+  }
+
+  .project-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .project-filters input,
+  .project-filters select {
+    background: rgba(24, 46, 71, 0.84);
+    border-color: rgba(46, 140, 176, 0.44);
+    color: #deeff8;
+  }
+
+  .project-card {
+    background: rgba(8, 31, 50, 0.88);
+    border-color: rgba(41, 131, 166, 0.34);
+  }
+
+  .project-image {
+    height: 170px;
+    background: linear-gradient(135deg, #1b5f6f, #0e2f3d 52%, #081e2a);
+  }
+
+  .project-card h3 {
+    color: #f0f8ff;
+    font-size: 1.45rem;
+  }
+
+  .project-card p,
+  .project-card strong {
+    color: #99b8c8;
+  }
+
+  .project-detail-panel {
+    background: rgba(8, 31, 50, 0.88);
+    border-color: rgba(41, 131, 166, 0.34);
+  }
+
+  .project-detail-head h2,
+  .project-products-table-wrap h3 {
+    color: #f0f8ff;
+  }
+
+  .project-detail-head p,
+  .project-detail-description,
+  .project-detail-grid p,
+  .project-products-table td,
+  .project-products-table th {
+    color: #9db7c8;
+  }
+
+  .project-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}

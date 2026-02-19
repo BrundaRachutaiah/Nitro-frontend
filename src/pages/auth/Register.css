@@ -1,0 +1,110 @@
+.register-page {
+  min-height: 100vh;
+  background: #edf1f2;
+}
+
+.register-shell {
+  max-width: 460px;
+}
+
+.register-brand {
+  font-size: clamp(2.5rem, 7vw, 3.5rem);
+  font-weight: 700;
+  line-height: 1;
+  color: #111a22;
+}
+
+.register-subtitle {
+  color: #4f7684;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  font-size: clamp(0.85rem, 2.8vw, 1.35rem);
+}
+
+.register-card {
+  border-radius: 1rem;
+  border: 1px solid #cfd8dc !important;
+  background: #f8fbfb;
+}
+
+.register-title {
+  font-size: clamp(2rem, 6vw, 2.6rem);
+  font-weight: 700;
+  color: #101718;
+}
+
+.register-label {
+  font-weight: 700;
+  color: #101718;
+  font-size: 1rem;
+}
+
+.register-input {
+  height: 56px;
+  border-radius: 0.8rem;
+  border: 1px solid #cfd8dc;
+  background: #f8fbfb;
+  font-size: 1rem;
+  color: #24404d;
+}
+
+.register-input:focus {
+  border-color: #00a3c8;
+  box-shadow: none;
+}
+
+.register-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 58px;
+  border-radius: 0.8rem;
+  border: 3px solid #08a4c8 !important;
+  background: #08a4c8 !important;
+  color: #fff !important;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 1rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.register-submit:hover,
+.register-submit:focus,
+.register-submit:active {
+  background: #0998bb !important;
+  border-color: #0998bb !important;
+  color: #fff !important;
+}
+
+.register-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.register-google-btn {
+  height: 58px;
+  border-radius: 0.8rem;
+  font-weight: 600;
+}
+
+.register-google-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.register-login {
+  color: #4f7684;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.register-link {
+  color: #00a3c8;
+  text-decoration: none;
+}
+
+.register-link:hover {
+  text-decoration: underline;
+}
