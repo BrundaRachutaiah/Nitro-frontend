@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getPaymentDetails, savePaymentDetails } from "../../api/allocation.api";
 import { getMyProfile, updateMyProfile } from "../../api/user.api";
+import { getStoredToken, requestEmailUpdateInSupabase } from "../../lib/auth";
 import "./Profile.css";
 
 const initialForm = {
@@ -32,6 +33,7 @@ const Profile = () => {
   const [message, setMessage] = useState("");
   const [form, setForm] = useState(initialForm);
   const [initialLoadedForm, setInitialLoadedForm] = useState(initialForm);
+  const [confirmEmail, setConfirmEmail] = useState("");
 
   const participantDashboardPath = id ? `/participant/${id}/dashboard` : "/dashboard";
   const participantAllocationPath = id ? `/participant/${id}/allocation/active` : "/dashboard";
@@ -100,6 +102,8 @@ const Profile = () => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+
   const handleSave = async (event) => {
     event.preventDefault();
     setSaving(true);
@@ -107,8 +111,38 @@ const Profile = () => {
     setMessage("");
 
     try {
+      const normalizedName = String(form.full_name || "").trim();
+      const normalizedEmail = String(form.email || "").trim().toLowerCase();
+      const initialEmail = String(initialLoadedForm.email || "").trim().toLowerCase();
+      const emailChanged = normalizedEmail !== initialEmail;
+
+      if (!normalizedName) {
+        throw new Error("Full name is required.");
+      }
+
+      if (!isValidEmail(normalizedEmail)) {
+        throw new Error("Please enter a valid email address.");
+      }
+
+      if (emailChanged) {
+        const normalizedConfirmEmail = String(confirmEmail || "").trim().toLowerCase();
+        if (!normalizedConfirmEmail) {
+          throw new Error("Please re-enter your email in Confirm Email.");
+        }
+        if (normalizedEmail !== normalizedConfirmEmail) {
+          throw new Error("Email and Confirm Email do not match.");
+        }
+
+        const token = getStoredToken();
+        await requestEmailUpdateInSupabase({
+          token,
+          email: normalizedEmail
+        });
+      }
+
       await updateMyProfile({
-        full_name: String(form.full_name || "").trim()
+        full_name: normalizedName,
+        email: normalizedEmail
       });
 
       await savePaymentDetails({
@@ -128,11 +162,20 @@ const Profile = () => {
         }
       });
 
-      setMessage("Profile updated successfully.");
-      setInitialLoadedForm(form);
+      setMessage(
+        emailChanged
+          ? "Profile saved. Please verify your new email from your inbox before using it for next login."
+          : "Profile updated successfully."
+      );
+      setInitialLoadedForm((prev) => ({
+        ...form,
+        full_name: normalizedName,
+        email: emailChanged ? normalizedEmail : prev.email
+      }));
+      setConfirmEmail("");
       setEditing(false);
     } catch (err) {
-      setError(err?.response?.data?.message || "Unable to save profile.");
+      setError(err?.response?.data?.message || err?.message || "Unable to save profile.");
     } finally {
       setSaving(false);
     }
@@ -140,6 +183,7 @@ const Profile = () => {
 
   const handleCancel = () => {
     setForm(initialLoadedForm);
+    setConfirmEmail("");
     setEditing(false);
     setError("");
     setMessage("");
@@ -151,7 +195,7 @@ const Profile = () => {
         <div className="participant-profile-brand">Nitro</div>
         <nav>
           <button type="button" onClick={() => navigate(participantDashboardPath)}>Dashboard</button>
-          <button type="button" onClick={() => navigate(participantAllocationPath)}>Allocations</button>
+          <button type="button" onClick={() => navigate(participantAllocationPath)}>My Tasks</button>
           <button type="button" onClick={() => navigate(participantPayoutPath)}>Payouts</button>
           <button type="button" className="active" onClick={() => navigate(participantProfilePath)}>Profile</button>
         </nav>
@@ -189,8 +233,24 @@ const Profile = () => {
                 </label>
                 <label>
                   Email
-                  <input value={form.email} readOnly />
+                  <input
+                    value={form.email}
+                    onChange={(e) => setField("email", e.target.value)}
+                    readOnly={!editing}
+                    type="email"
+                  />
                 </label>
+                {editing ? (
+                  <label>
+                    Confirm Email
+                    <input
+                      value={confirmEmail}
+                      onChange={(e) => setConfirmEmail(e.target.value)}
+                      type="email"
+                      placeholder="Re-enter email to confirm"
+                    />
+                  </label>
+                ) : null}
                 <label>
                   Role
                   <input value={form.role} readOnly />

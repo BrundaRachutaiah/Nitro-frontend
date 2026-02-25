@@ -15,6 +15,9 @@ export const applyForProject = (projectId, payload) =>
 export const getMyApplications = () =>
   axios.get("/applications/my");
 
+export const markApplicationPurchased = (applicationId) =>
+  axios.patch(`/applications/${applicationId}/purchased`);
+
 export const getPaymentDetails = () =>
   axios.get("/applications/payment-details");
 

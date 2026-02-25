@@ -15,7 +15,7 @@
 .participant-action-header h1 {
   margin: 0;
   color: #0d2a45;
-  font-size: 2rem;
+  font-size: clamp(1.8rem, 3vw, 2.3rem);
 }
 
 .participant-action-header p {
@@ -28,7 +28,8 @@
   background: #fff;
   color: #0d2a45;
   border-radius: 12px;
-  padding: 10px 14px;
+  height: 44px;
+  padding: 0 14px;
   font-weight: 600;
 }
 
@@ -36,13 +37,13 @@
   background: #fff;
   border: 1px solid #d6e1ee;
   border-radius: 18px;
-  padding: 18px;
+  padding: 20px;
   max-width: 780px;
 }
 
 .participant-action-form {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .participant-action-form label {
@@ -56,6 +57,18 @@
   border: 1px solid #c6d7ea;
   border-radius: 10px;
   padding: 10px 12px;
+  color: #0d2a45;
+  background: #fff;
+}
+
+.participant-action-form input,
+.participant-action-form select {
+  height: 44px;
+}
+
+.participant-action-form textarea {
+  min-height: 120px;
+  resize: vertical;
 }
 
 .participant-action-form button {
@@ -65,7 +78,26 @@
   background: #0ea5cf;
   color: #fff;
   font-weight: 700;
-  padding: 10px 16px;
+  height: 44px;
+  padding: 0 16px;
+}
+
+.participant-action-back,
+.participant-action-form button,
+.participant-action-form input,
+.participant-action-form select,
+.participant-action-form textarea {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.participant-action-form input:focus-visible,
+.participant-action-form select:focus-visible,
+.participant-action-form textarea:focus-visible,
+.participant-action-back:focus-visible,
+.participant-action-form button:focus-visible {
+  outline: none;
+  border-color: #0ea5cf;
+  box-shadow: 0 0 0 3px rgba(14, 165, 207, 0.22);
 }
 
 .participant-action-note {
@@ -104,5 +136,10 @@
 
   .participant-action-header h1 {
     font-size: 1.55rem;
+  }
+
+  .participant-action-back,
+  .participant-action-form button {
+    width: 100%;
   }
 }

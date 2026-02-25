@@ -53,7 +53,7 @@ const PayoutStatus = () => {
         <div className="participant-payout-brand">Nitro</div>
         <nav>
           <button type="button" onClick={() => navigate(participantDashboardPath)}>Dashboard</button>
-          <button type="button" onClick={() => navigate(participantAllocationPath)}>Allocations</button>
+          <button type="button" onClick={() => navigate(participantAllocationPath)}>My Tasks</button>
           <button type="button" className="active" onClick={() => navigate(participantPayoutPath)}>Payouts</button>
         </nav>
       </header>
@@ -61,8 +61,8 @@ const PayoutStatus = () => {
       <main className="participant-payout-main">
         <section className="participant-payout-head">
           <div>
-            <h1>Payout Status</h1>
-            <p>Track approved, pending, and processed payouts.</p>
+            <h1>My Payouts</h1>
+            <p>Track your payout progress and payment history.</p>
           </div>
           <button type="button" onClick={loadPayouts}>Refresh</button>
         </section>

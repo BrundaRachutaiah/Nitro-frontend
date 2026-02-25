@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { clearStoredTokens, getStoredToken, verifyBackendUser } from "./lib/auth";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
+import RoleSelection from "./pages/auth/RoleSelection";
 import SuperAdminDashboard from "./pages/superAdmin/Dashboard";
 import AdminDashboard from "./pages/admin/Dashboard";
 import ParticipantDashboard from "./pages/participant/Dashboard";
@@ -336,7 +337,9 @@ const ParticipantScopedRoute = ({ children }) => {
 function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<RoleSelection />} />
+      <Route path="/login/admin" element={<Login mode="admin" />} />
+      <Route path="/login/participant" element={<Login mode="participant" />} />
       <Route path="/register" element={<Register />} />
       <Route path="/dashboard" element={<DashboardRoute />} />
       <Route path="/admin/:id/dashboard" element={<AdminDashboardRoute />} />

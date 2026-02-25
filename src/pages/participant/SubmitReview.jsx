@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getMyAllocationTracking } from "../../api/allocation.api";
-import { submitReview, uploadReviewProofs } from "../../api/participant.api";
+import { submitFeedback, submitReview, uploadReviewProofs } from "../../api/participant.api";
 import "./ActionForms.css";
 import "./SubmitReview.css";
 
@@ -12,13 +12,15 @@ const SubmitReview = () => {
   const [reviewText, setReviewText] = useState("");
   const [reviewUrl, setReviewUrl] = useState("");
   const [reviewFiles, setReviewFiles] = useState([]);
+  const [rating, setRating] = useState(5);
+  const [feedbackText, setFeedbackText] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [allocations, setAllocations] = useState([]);
   const participantDashboardPath = id ? `/participant/${id}/dashboard` : "/dashboard";
-  const participantAllocationPath = id ? `/participant/${id}/allocation/active` : "/dashboard";
+  const participantTasksPath = id ? `/participant/${id}/allocation/active` : "/dashboard";
   const participantPayoutPath = id ? `/participant/${id}/payouts` : "/dashboard";
 
   useEffect(() => {
@@ -31,7 +33,10 @@ const SubmitReview = () => {
           const mode = String(row?.projects?.mode || "").toUpperCase();
           const proofStatus = String(row?.purchase_proof?.status || "").toUpperCase();
           const proofSubmitted = proofStatus === "PENDING" || proofStatus === "APPROVED";
-          return (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !row?.review_submission;
+          const proofApproved = proofStatus === "APPROVED";
+          const needsReview = (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !row?.review_submission;
+          const needsFeedback = mode === "MARKETPLACE" && proofApproved && Boolean(row?.review_submission) && !row?.feedback_submission;
+          return needsReview || needsFeedback;
         });
         setAllocations(candidates);
         if (candidates.length) {
@@ -41,7 +46,7 @@ const SubmitReview = () => {
           setAllocationId(fromRoute);
         }
       } catch (err) {
-        setError(err.response?.data?.message || "Unable to load allocations.");
+        setError(err.response?.data?.message || "Unable to load tasks.");
       } finally {
         setLoading(false);
       }
@@ -56,6 +61,8 @@ const SubmitReview = () => {
   );
 
   const selectedMode = String(selectedAllocation?.projects?.mode || "").toUpperCase();
+  const needsReview = Boolean(selectedAllocation) && !selectedAllocation?.review_submission;
+  const needsFeedback = selectedMode === "MARKETPLACE" && Boolean(selectedAllocation?.review_submission) && !selectedAllocation?.feedback_submission;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -63,67 +70,91 @@ const SubmitReview = () => {
     setError("");
 
     if (!allocationId) {
-      setError("Please select allocation.");
+      setError("Please select a task.");
       return;
     }
 
-    if (selectedMode === "MARKETPLACE" && reviewFiles.length === 0 && !reviewUrl.trim()) {
-      setError("Marketplace mode requires review screenshot upload or review URL.");
-      return;
-    }
-
-    if (selectedMode === "D2C" && !reviewText.trim() && reviewFiles.length === 0 && !reviewUrl.trim()) {
-      setError("For D2C, add review text and/or review screenshot.");
+    if (!needsReview && !needsFeedback) {
+      setError("Selected task is already completed.");
       return;
     }
 
     try {
       setSubmitting(true);
-      const manualReviewUrl = reviewUrl.trim();
-      let finalReviewUrl = manualReviewUrl;
-      let finalReviewText = reviewText.trim();
-      let uploadedUrls = [];
-
-      if (reviewFiles.length > 0) {
-        const formData = new FormData();
-        reviewFiles.forEach((file) => {
-          formData.append("files", file);
-        });
-        const uploadRes = await uploadReviewProofs(allocationId, formData);
-        uploadedUrls = Array.isArray(uploadRes?.data?.data?.review_urls)
-          ? uploadRes.data.data.review_urls
-          : [];
-      }
-
-      if (uploadedUrls.length > 0) {
-        finalReviewUrl = uploadedUrls[0];
-      }
-
-      if (uploadedUrls.length > 1 || manualReviewUrl) {
-        const extraLinks = [
-          ...uploadedUrls.slice(1),
-          ...(manualReviewUrl ? [manualReviewUrl] : [])
-        ];
-
-        if (extraLinks.length > 0) {
-          const extraText = `Additional review image links:\n${extraLinks.join("\n")}`;
-          finalReviewText = finalReviewText
-            ? `${finalReviewText}\n\n${extraText}`
-            : extraText;
+      if (needsReview) {
+        if (selectedMode === "MARKETPLACE" && reviewFiles.length === 0 && !reviewUrl.trim()) {
+          setError("Please upload a review screenshot or provide a review URL.");
+          setSubmitting(false);
+          return;
         }
+
+        if (selectedMode === "D2C" && !reviewText.trim() && reviewFiles.length === 0 && !reviewUrl.trim()) {
+          setError("Please add review text and/or screenshot.");
+          setSubmitting(false);
+          return;
+        }
+
+        const manualReviewUrl = reviewUrl.trim();
+        let finalReviewUrl = manualReviewUrl;
+        let finalReviewText = reviewText.trim();
+        let uploadedUrls = [];
+
+        if (reviewFiles.length > 0) {
+          const formData = new FormData();
+          reviewFiles.forEach((file) => {
+            formData.append("files", file);
+          });
+          const uploadRes = await uploadReviewProofs(allocationId, formData);
+          uploadedUrls = Array.isArray(uploadRes?.data?.data?.review_urls)
+            ? uploadRes.data.data.review_urls
+            : [];
+        }
+
+        if (uploadedUrls.length > 0) {
+          finalReviewUrl = uploadedUrls[0];
+        }
+
+        if (uploadedUrls.length > 1 || manualReviewUrl) {
+          const extraLinks = [
+            ...uploadedUrls.slice(1),
+            ...(manualReviewUrl ? [manualReviewUrl] : [])
+          ];
+
+          if (extraLinks.length > 0) {
+            const extraText = `Additional review image links:\n${extraLinks.join("\n")}`;
+            finalReviewText = finalReviewText
+              ? `${finalReviewText}\n\n${extraText}`
+              : extraText;
+          }
+        }
+
+        await submitReview({
+          allocationId,
+          reviewText: finalReviewText,
+          reviewUrl: finalReviewUrl
+        });
+        setMessage("Review submitted and awaiting admin approval.");
+      } else if (needsFeedback) {
+        if (!feedbackText.trim()) {
+          setError("Please add your feedback.");
+          setSubmitting(false);
+          return;
+        }
+
+        await submitFeedback({
+          allocationId,
+          rating: Number(rating),
+          feedbackText: feedbackText.trim()
+        });
+        setMessage("Feedback submitted successfully.");
       }
 
-      await submitReview({
-        allocationId,
-        reviewText: finalReviewText,
-        reviewUrl: finalReviewUrl
-      });
-      setMessage("Review submitted and awaiting admin approval.");
       setReviewFiles([]);
       setReviewText("");
       setReviewUrl("");
+      setFeedbackText("");
     } catch (err) {
-      setError(err.response?.data?.message || "Review submission failed.");
+      setError(err.response?.data?.message || "Submission failed.");
     } finally {
       setSubmitting(false);
     }
@@ -135,7 +166,7 @@ const SubmitReview = () => {
         <div className="participant-review-brand">Nitro</div>
         <nav>
           <button type="button" onClick={() => navigate(participantDashboardPath)}>Dashboard</button>
-          <button type="button" className="active" onClick={() => navigate(participantAllocationPath)}>Allocations</button>
+          <button type="button" className="active" onClick={() => navigate(participantTasksPath)}>My Tasks</button>
           <button type="button" onClick={() => navigate(participantPayoutPath)}>Payouts</button>
         </nav>
       </header>
@@ -143,11 +174,11 @@ const SubmitReview = () => {
       <main className="participant-review-main">
         <header className="participant-action-header">
           <div>
-            <h1>Submit Review</h1>
-            <p>Upload product screenshot and submit review text for Marketplace or D2C allocations.</p>
+            <h1>Submit Review / Feedback</h1>
+            <p>Use this page to complete your pending review or feedback task.</p>
           </div>
-          <button type="button" className="participant-action-back" onClick={() => navigate(participantAllocationPath)}>
-            Back to Allocations
+          <button type="button" className="participant-action-back" onClick={() => navigate(participantTasksPath)}>
+            Back to My Tasks
           </button>
         </header>
 
@@ -156,12 +187,12 @@ const SubmitReview = () => {
           {message ? <p className="participant-action-success">{message}</p> : null}
           {loading ? <p className="participant-action-muted">Loading allocations...</p> : null}
           {!loading && !allocations.length ? (
-            <p className="participant-action-muted">No allocations are ready for review submission.</p>
+            <p className="participant-action-muted">No review or feedback tasks are pending.</p>
           ) : null}
 
           {!loading && allocations.length ? (
             <form onSubmit={handleSubmit} className="participant-action-form">
-              <label htmlFor="allocationId">Allocation</label>
+              <label htmlFor="allocationId">Task</label>
               <select id="allocationId" value={allocationId} onChange={(e) => setAllocationId(e.target.value)}>
                 {allocations.map((row) => {
                   const title = row?.projects?.title || row?.projects?.name || row.id;
@@ -175,44 +206,70 @@ const SubmitReview = () => {
 
               {selectedAllocation ? (
                 <p className="participant-action-note">
-                  Mode: {selectedMode || "-"} {selectedMode === "MARKETPLACE" ? "(Review screenshot is required)" : "(Review text and screenshot are allowed)"}
+                  Task: {needsReview ? "Submit Review" : needsFeedback ? "Submit Feedback" : "Completed"}
                 </p>
               ) : null}
+              {needsReview ? (
+                <>
+                  <label htmlFor="reviewFile">Review Screenshot</label>
+                  <input
+                    id="reviewFile"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => setReviewFiles(Array.from(e.target.files || []))}
+                  />
+                  {reviewFiles.length ? (
+                    <p className="participant-action-note">
+                      {reviewFiles.length} image(s) selected
+                    </p>
+                  ) : null}
 
-              <label htmlFor="reviewFile">Review Screenshot</label>
-              <input
-                id="reviewFile"
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) => setReviewFiles(Array.from(e.target.files || []))}
-              />
-              {reviewFiles.length ? (
-                <p className="participant-action-note">
-                  {reviewFiles.length} image(s) selected
-                </p>
+                  <label htmlFor="reviewUrl">Review Proof URL (Optional)</label>
+                  <input
+                    id="reviewUrl"
+                    type="url"
+                    placeholder="https://..."
+                    value={reviewUrl}
+                    onChange={(e) => setReviewUrl(e.target.value)}
+                  />
+
+                  <label htmlFor="reviewText">Review Text</label>
+                  <textarea
+                    id="reviewText"
+                    placeholder="Write your review"
+                    value={reviewText}
+                    onChange={(e) => setReviewText(e.target.value)}
+                    rows={5}
+                  />
+                </>
               ) : null}
 
-              <label htmlFor="reviewUrl">Review Proof URL (Optional)</label>
-              <input
-                id="reviewUrl"
-                type="url"
-                placeholder="https://..."
-                value={reviewUrl}
-                onChange={(e) => setReviewUrl(e.target.value)}
-              />
+              {needsFeedback ? (
+                <>
+                  <label htmlFor="rating">Rating (1-5)</label>
+                  <input
+                    id="rating"
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={rating}
+                    onChange={(e) => setRating(e.target.value)}
+                  />
 
-              <label htmlFor="reviewText">Review Text</label>
-              <textarea
-                id="reviewText"
-                placeholder="Write your review"
-                value={reviewText}
-                onChange={(e) => setReviewText(e.target.value)}
-                rows={5}
-              />
+                  <label htmlFor="feedbackText">Feedback</label>
+                  <textarea
+                    id="feedbackText"
+                    placeholder="Share your feedback"
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                    rows={5}
+                  />
+                </>
+              ) : null}
 
-              <button type="submit" disabled={submitting}>
-                Submit Review
+              <button type="submit" disabled={submitting || (!needsReview && !needsFeedback)}>
+                {submitting ? "Submitting..." : needsReview ? "Submit Review" : needsFeedback ? "Submit Feedback" : "Completed"}
               </button>
             </form>
           ) : null}

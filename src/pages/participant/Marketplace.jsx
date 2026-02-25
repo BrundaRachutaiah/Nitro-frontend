@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { applyForProject, getMyApplications, getPaymentDetails } from "../../api/allocation.api";
+import {
+  applyForProject,
+  getMyApplications,
+  getPaymentDetails,
+  markApplicationPurchased
+} from "../../api/allocation.api";
 import {
   getActiveCatalog,
   getProjectById,
@@ -29,12 +34,31 @@ const formatNumber = (value) => {
   return num.toLocaleString("en-IN");
 };
 
+const getPreviewImage = (primaryUrl, fallbackSeed = "nitro-product") => {
+  const trimmed = String(primaryUrl || "").trim();
+  if (trimmed) {
+    if (/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(trimmed)) {
+      return trimmed;
+    }
+
+    try {
+      const hostname = new URL(trimmed).hostname;
+      if (hostname) {
+        return `https://logo.clearbit.com/${hostname}`;
+      }
+    } catch {
+      // Ignore malformed URL and use fallback.
+    }
+  }
+
+  return `https://picsum.photos/seed/${encodeURIComponent(fallbackSeed)}/640/420`;
+};
+
 const Marketplace = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const projectIdFromQuery = searchParams.get("project");
-  const [mode, setMode] = useState("MARKETPLACE");
   const [query, setQuery] = useState("");
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -62,6 +86,34 @@ const Marketplace = () => {
   });
   const isFocusedProjectView = Boolean(projectIdFromQuery);
 
+  const handleBuyNow = async (product, application) => {
+    if (!application?.id) {
+      setError("Application not found for this product.");
+      return;
+    }
+
+    try {
+      await markApplicationPurchased(application.id);
+      setMyApplications((prev) =>
+        prev.map((item) => (
+          item.id === application.id
+            ? { ...item, status: "PURCHASED" }
+            : item
+        ))
+      );
+    } catch (err) {
+      const message = err?.response?.data?.message || "Unable to move product to applied list.";
+      setError(message);
+      return;
+    }
+
+    if (product?.product_url) {
+      window.open(product.product_url, "_blank", "noopener,noreferrer");
+    }
+
+    navigate(`/participant/${id}/dashboard?tab=applied`);
+  };
+
   const loadProjects = useCallback(async () => {
     setError("");
     setLoading(true);
@@ -70,10 +122,6 @@ const Marketplace = () => {
         q: query.trim() || undefined
       };
 
-      if (!projectIdFromQuery) {
-        filters.mode = mode;
-      }
-
       const res = await getActiveCatalog(filters);
       setProjects(Array.isArray(res.data?.data) ? res.data.data : []);
     } catch (err) {
@@ -81,7 +129,7 @@ const Marketplace = () => {
     } finally {
       setLoading(false);
     }
-  }, [mode, projectIdFromQuery, query]);
+  }, [query]);
 
   useEffect(() => {
     loadProjects();
@@ -162,11 +210,6 @@ const Marketplace = () => {
     const match = projects.find((project) => project.id === projectIdFromQuery);
     if (match) {
       openProject(match);
-      if (String(match.mode || "").toUpperCase() === "D2C") {
-        setMode("D2C");
-      } else if (String(match.mode || "").toUpperCase() === "MARKETPLACE") {
-        setMode("MARKETPLACE");
-      }
     }
   }, [openProject, projectIdFromQuery, projects, selectedProject?.id]);
 
@@ -302,11 +345,26 @@ const Marketplace = () => {
       return appProjectId === selectedProject?.id && appProductId === product?.id;
     });
 
+  const displayProducts = useMemo(
+    () =>
+      products.filter((product) => {
+        const match = myApplications.find((item) => {
+          const appProjectId = item?.project_id || item?.projects?.id;
+          const appProductId = item?.product_id || item?.project_products?.id;
+          return appProjectId === selectedProject?.id && appProductId === product?.id;
+        });
+        const status = String(match?.status || "").toUpperCase();
+        return status !== "PURCHASED";
+      }),
+    [products, myApplications, selectedProject?.id]
+  );
+
   return (
     <div className="participant-marketplace-page">
       <header className="participant-marketplace-head">
         <div>
-          <h1>Marketplace</h1>
+          <h1>Browse Products</h1>
+          <p>Choose a project, request access, and send your product request.</p>
         </div>
         <button
           type="button"
@@ -319,19 +377,11 @@ const Marketplace = () => {
 
       {!isFocusedProjectView ? (
         <section className="participant-marketplace-filters">
-          <div className="participant-marketplace-modes">
-            <button type="button" className={mode === "MARKETPLACE" ? "active" : ""} onClick={() => setMode("MARKETPLACE")}>
-              Marketplace
-            </button>
-            <button type="button" className={mode === "D2C" ? "active" : ""} onClick={() => setMode("D2C")}>
-              D2C
-            </button>
-          </div>
           <input
             type="text"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={`Search ${mode} projects...`}
+            placeholder="Search projects..."
           />
         </section>
       ) : null}
@@ -346,15 +396,20 @@ const Marketplace = () => {
             const accessStatus = String(project?.access_status || "LOCKED").toUpperCase();
             return (
               <article key={project.id} className="participant-marketplace-card">
-                <span className={`participant-marketplace-tag ${String(project.mode || mode).toLowerCase()}`}>
-                  {String(project.mode || mode).toUpperCase()}
-                </span>
+                <div className="participant-marketplace-card-image">
+                  <img
+                    src={getPreviewImage(project?.product_url, `${project?.id || title}-marketplace`)}
+                    alt={title}
+                    loading="lazy"
+                  />
+                </div>
                 <h3>{title}</h3>
-                <p>Project details are hidden until admin approves access.</p>
+                <p>Request access to view products and continue.</p>
                 <div className="participant-marketplace-meta">
                   <span>{project?.category || "General"}</span>
-                  <strong>{accessStatus === "APPROVED" ? "Unlocked" : accessStatus}</strong>
+                  <strong>{accessStatus === "APPROVED" ? "Ready" : "Pending Access"}</strong>
                 </div>
+                <p>Client: {project?.created_by_name || "Client"}</p>
                 <button type="button" onClick={() => openProject(project)}>
                   {accessStatus === "APPROVED" ? "View Products" : "Request Access"}
                 </button>
@@ -375,16 +430,12 @@ const Marketplace = () => {
 
       {selectedProject ? (
         <section className="participant-marketplace-products" style={{ marginTop: 24 }}>
-          <h2>{selectedProject.title || "Selected Project"} Product List</h2>
+          <h2>{selectedProject.title || "Selected Project"} - Products</h2>
           <div className="participant-project-details">
             <div className="participant-project-details-grid">
               <div className="participant-project-detail-item">
                 <span>Category</span>
                 <strong>{selectedProject?.category || "-"}</strong>
-              </div>
-              <div className="participant-project-detail-item">
-                <span>Mode</span>
-                <strong>{String(selectedProject?.mode || "-").toUpperCase()}</strong>
               </div>
               <div className="participant-project-detail-item">
                 <span>Status</span>
@@ -407,7 +458,7 @@ const Marketplace = () => {
                 <strong>{formatDate(selectedProject?.end_date)}</strong>
               </div>
               <div className="participant-project-detail-item">
-                <span>Created By</span>
+                <span>Client</span>
                 <strong>{selectedProject?.created_by_name || "-"}</strong>
               </div>
               <div className="participant-project-detail-item">
@@ -427,28 +478,36 @@ const Marketplace = () => {
             </div>
           </div>
           <p className="participant-marketplace-loading" style={{ marginTop: 6 }}>
-            Product links are available after admin unlocks this project.
+            Select a product and send request to admin.
           </p>
           {productsLoading ? <p className="participant-marketplace-loading">Loading products...</p> : null}
-          {!productsLoading && !products.length ? (
+          {!productsLoading && !displayProducts.length ? (
             <div className="participant-marketplace-empty">No products available or all products already applied.</div>
           ) : null}
 
-          {!productsLoading && products.length ? (
+          {!productsLoading && displayProducts.length ? (
             <div className="participant-products-table-wrap">
               <table className="participant-products-table">
                 <thead>
                   <tr>
+                    <th>Image</th>
                     <th>Product Name</th>
                     <th>Product URL</th>
-                    <th>Mode</th>
                     <th>Price (INR)</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((product) => (
+                  {displayProducts.map((product) => (
                     <tr key={product.id}>
+                      <td>
+                        <img
+                          className="participant-products-thumb"
+                          src={getPreviewImage(product?.image_url || product?.product_url, `${product?.id || product?.name}-thumb`)}
+                          alt={product?.name || "Product"}
+                          loading="lazy"
+                        />
+                      </td>
                       <td>{product.name}</td>
                       <td>
                         {product?.product_url ? (
@@ -459,14 +518,13 @@ const Marketplace = () => {
                           <span className="participant-link-locked">URL not available</span>
                         )}
                       </td>
-                      <td>{String(selectedProject.mode || "").toUpperCase()}</td>
                       <td>{formatCurrency(product.price || product.product_value || 0)}</td>
                       <td>
                         {(() => {
                           const match = findApplication(product);
                           const status = String(match?.status || "").toUpperCase();
 
-                          if (!match) {
+                          if (!match || status === "COMPLETED") {
                             return (
                               <button
                                 type="button"
@@ -487,8 +545,8 @@ const Marketplace = () => {
                                   : !isSelectedProjectActive
                                     ? "Project Closed"
                                     : hasPaymentDetails
-                                      ? "Send Request"
-                                      : "Apply"}
+                                      ? (status === "COMPLETED" ? "Request Again" : "Send Request")
+                                      : (status === "COMPLETED" ? "Request Again" : "Send Request")}
                               </button>
                             );
                           }
@@ -500,9 +558,13 @@ const Marketplace = () => {
                           if (status === "APPROVED") {
                             if (product?.product_url) {
                               return (
-                                <a className="participant-products-buy-btn" href={product.product_url} target="_blank" rel="noreferrer">
+                                <button
+                                  type="button"
+                                  className="participant-products-buy-btn"
+                                  onClick={() => handleBuyNow(product, match)}
+                                >
                                   Buy Now
-                                </a>
+                                </button>
                               );
                             }
                             return <span className="participant-pill participant-pill-approved">Approved</span>;
@@ -527,8 +589,8 @@ const Marketplace = () => {
       {applyProduct ? (
         <div className="participant-modal-overlay" role="presentation" onClick={() => setApplyProduct(null)}>
           <section className="participant-modal-card" onClick={(e) => e.stopPropagation()}>
-            <h3>Apply for {applyProduct.name}</h3>
-            <p>Fill address and bank details to submit your request to admin.</p>
+            <h3>Complete details for {applyProduct.name}</h3>
+            <p>Add address and bank details to send your request.</p>
             <div className="participant-modal-grid">
               <input placeholder="Address line 1*" value={form.address_line1} onChange={(e) => setForm((prev) => ({ ...prev, address_line1: e.target.value }))} />
               <input placeholder="Address line 2" value={form.address_line2} onChange={(e) => setForm((prev) => ({ ...prev, address_line2: e.target.value }))} />

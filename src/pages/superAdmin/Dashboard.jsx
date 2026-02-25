@@ -358,17 +358,14 @@ const Dashboard = () => {
         title: "Pending Approvals",
         value: formatMetricValue(
           toNumber(approvalCounts?.participants)
-          + toNumber(approvalCounts?.project_access_requests)
           + toNumber(approvalCounts?.product_applications)
           + toNumber(approvalCounts?.purchase_proofs)
           + toNumber(approvalCounts?.review_submissions)
         ),
         note:
           `${toNumber(approvalCounts?.participants)} login`
-          + ` + ${toNumber(approvalCounts?.project_access_requests)} unlock`
-          + ` + ${toNumber(approvalCounts?.product_applications)} applications`
-          + ` + ${toNumber(approvalCounts?.purchase_proofs)} invoice proofs`
-          + ` + ${toNumber(approvalCounts?.review_submissions)} reviews`,
+          + ` + ${toNumber(approvalCounts?.product_applications)} products`
+          + ` + ${toNumber(approvalCounts?.purchase_proofs) + toNumber(approvalCounts?.review_submissions)} review/invoices`,
         icon: "approvals",
         tone: "warning"
       },
@@ -382,7 +379,6 @@ const Dashboard = () => {
     ],
     [
       approvalCounts?.participants,
-      approvalCounts?.project_access_requests,
       approvalCounts?.product_applications,
       approvalCounts?.purchase_proofs,
       approvalCounts?.review_submissions,
@@ -530,7 +526,6 @@ const Dashboard = () => {
                     <span className="badge text-bg-danger ms-2">
                       {
                         toNumber(approvalCounts?.participants)
-                        + toNumber(approvalCounts?.project_access_requests)
                         + toNumber(approvalCounts?.product_applications)
                         + toNumber(approvalCounts?.purchase_proofs)
                         + toNumber(approvalCounts?.review_submissions)

@@ -101,10 +101,10 @@ const PaymentDetails = () => {
       <header className="participant-action-header">
         <div>
           <h1>Payment Details</h1>
-          <p>Complete address and bank details to unlock approved product links.</p>
+          <p>Complete address and bank details to continue product requests.</p>
         </div>
         <button type="button" className="participant-action-back" onClick={() => navigate(backPath)}>
-          Back to Marketplace
+          Back to Products
         </button>
       </header>
 

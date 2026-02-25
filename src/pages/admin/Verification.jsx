@@ -31,6 +31,7 @@ const Verifications = () => {
   const [statusFilter, setStatusFilter] = useState(initialFilters.status);
   const [projectFilter, setProjectFilter] = useState("ALL");
   const [productFilter, setProductFilter] = useState("ALL");
+  const [processingReviewId, setProcessingReviewId] = useState(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -76,12 +77,16 @@ const Verifications = () => {
   }, [location.search]);
 
   const updateReviewStatus = async (id, action) => {
+    if (processingReviewId === id) return;
     setError("");
+    setProcessingReviewId(id);
     try {
       await axios.patch(`/admin/reviews/${id}/${action}`);
       await load();
     } catch (err) {
       setError(err.response?.data?.message || `Failed to ${action} review`);
+    } finally {
+      setProcessingReviewId(null);
     }
   };
 
@@ -221,6 +226,8 @@ const Verifications = () => {
               <tr>
                 <th>Project</th>
                 <th>Product</th>
+                <th>Participant Name</th>
+                <th>Participant Email</th>
                 <th>Proof</th>
                 <th>Status</th>
                 <th>Uploaded</th>
@@ -229,12 +236,14 @@ const Verifications = () => {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={showActionsColumn ? 6 : 5}>Loading invoice uploads...</td></tr>
+                <tr><td colSpan={showActionsColumn ? 8 : 7}>Loading invoice uploads...</td></tr>
               ) : filteredProofs.length ? (
                 filteredProofs.map((p) => (
                   <tr key={p.id}>
                     <td>{p.project_name || "-"}</td>
                     <td>{p.product_name || "-"}</td>
+                    <td>{p.participant_name || "-"}</td>
+                    <td>{p.participant_email || "-"}</td>
                     <td><ProofReview proofUrl={p.file_url} /></td>
                     <td><span className={`admin-badge ${String(p.status || "").toLowerCase()}`}>{p.status || "-"}</span></td>
                     <td>{(p.uploaded_at || p.created_at) ? new Date(p.uploaded_at || p.created_at).toLocaleString() : "-"}</td>
@@ -248,7 +257,7 @@ const Verifications = () => {
                   </tr>
                 ))
               ) : (
-                <tr><td className="admin-empty" colSpan={showActionsColumn ? 6 : 5}>No invoice uploads for selected filter.</td></tr>
+                <tr><td className="admin-empty" colSpan={showActionsColumn ? 8 : 7}>No invoice uploads for selected filter.</td></tr>
               )}
             </tbody>
           </table>
@@ -263,6 +272,8 @@ const Verifications = () => {
               <tr>
                 <th>Project</th>
                 <th>Product</th>
+                <th>Participant Name</th>
+                <th>Participant Email</th>
                 <th>Review Link</th>
                 <th>Review Text</th>
                 <th>Status</th>
@@ -272,12 +283,14 @@ const Verifications = () => {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={showActionsColumn ? 7 : 6}>Loading review uploads...</td></tr>
+                <tr><td colSpan={showActionsColumn ? 9 : 8}>Loading review uploads...</td></tr>
               ) : filteredReviews.length ? (
                 filteredReviews.map((review) => (
                   <tr key={review.id}>
                     <td>{review.project_name || "-"}</td>
                     <td>{review.product_name || "-"}</td>
+                    <td>{review.participant_name || "-"}</td>
+                    <td>{review.participant_email || "-"}</td>
                     <td>
                       {review.review_url ? (
                         <a href={review.review_url} target="_blank" rel="noreferrer">View Upload</a>
@@ -290,10 +303,20 @@ const Verifications = () => {
                       <td>
                         {String(review?.status || "").toUpperCase() === "PENDING" ? (
                           <div className="admin-actions">
-                            <button type="button" className="admin-btn" onClick={() => updateReviewStatus(review.id, "approve")}>
+                            <button
+                              type="button"
+                              className="admin-btn"
+                              disabled={processingReviewId === review.id}
+                              onClick={() => updateReviewStatus(review.id, "approve")}
+                            >
                               Approve
                             </button>
-                            <button type="button" className="admin-btn" onClick={() => updateReviewStatus(review.id, "reject")}>
+                            <button
+                              type="button"
+                              className="admin-btn"
+                              disabled={processingReviewId === review.id}
+                              onClick={() => updateReviewStatus(review.id, "reject")}
+                            >
                               Reject
                             </button>
                           </div>
@@ -303,7 +326,7 @@ const Verifications = () => {
                   </tr>
                 ))
               ) : (
-                <tr><td className="admin-empty" colSpan={showActionsColumn ? 7 : 6}>No review uploads for selected filter.</td></tr>
+                <tr><td className="admin-empty" colSpan={showActionsColumn ? 9 : 8}>No review uploads for selected filter.</td></tr>
               )}
             </tbody>
           </table>

@@ -19,3 +19,23 @@ body {
   background: #edf1f2;
   color: #101718;
 }
+
+/* Global desktop compact scale for all pages */
+@media (min-width: 1200px) {
+  :root {
+    --desktop-ui-scale: 0.9;
+  }
+
+  body {
+    zoom: var(--desktop-ui-scale);
+  }
+
+  @supports not (zoom: 1) {
+    #root {
+      transform: scale(var(--desktop-ui-scale));
+      transform-origin: top left;
+      width: calc(100% / var(--desktop-ui-scale));
+      min-height: calc(100vh / var(--desktop-ui-scale));
+    }
+  }
+}

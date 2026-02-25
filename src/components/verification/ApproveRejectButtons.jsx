@@ -1,7 +1,12 @@
+import { useState } from "react";
 import { approveProof, rejectProof } from "../../api/verification.api";
 
 const ApproveRejectionButton = ({ id, onDone }) => {
+  const [submitting, setSubmitting] = useState(false);
+
   const handleApprove = async () => {
+    if (submitting) return;
+    setSubmitting(true);
     try {
       await approveProof(id);
       if (onDone) onDone();
@@ -12,10 +17,14 @@ const ApproveRejectionButton = ({ id, onDone }) => {
         onDone();
       }
       window.alert(message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleReject = async () => {
+    if (submitting) return;
+    setSubmitting(true);
     try {
       await rejectProof(id);
       if (onDone) onDone();
@@ -26,13 +35,15 @@ const ApproveRejectionButton = ({ id, onDone }) => {
         onDone();
       }
       window.alert(message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
     <div className="admin-actions">
-      <button className="admin-btn" onClick={handleApprove}>Approve</button>
-      <button className="admin-btn" onClick={handleReject}>Reject</button>
+      <button className="admin-btn" onClick={handleApprove} disabled={submitting}>Approve</button>
+      <button className="admin-btn" onClick={handleReject} disabled={submitting}>Reject</button>
     </div>
   );
 };

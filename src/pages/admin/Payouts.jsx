@@ -240,6 +240,7 @@ const Payouts = () => {
               <tr>
                 <th>Participant</th>
                 <th>Project</th>
+                <th>Product Name</th>
                 <th>Reward</th>
                 <th>Product</th>
                 <th>Total</th>
@@ -252,6 +253,7 @@ const Payouts = () => {
                 <tr key={row.id}>
                   <td>{row?.profiles?.full_name || row?.profiles?.email || "-"}</td>
                   <td>{row?.projects?.title || row?.projects?.name || "-"}</td>
+                  <td>{row?.product_name || "-"}</td>
                   <td>{formatCurrency(row?.reward_amount)}</td>
                   <td>{formatCurrency(row?.product_amount)}</td>
                   <td>{formatCurrency(row?.total_amount ?? row?.amount)}</td>

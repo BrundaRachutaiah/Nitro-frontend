@@ -192,8 +192,7 @@ const ProjectDetails = () => {
             <p><strong>Category:</strong> {project.category || "-"}</p>
             <p><strong>Mode:</strong> {project.mode || "-"}</p>
             <p><strong>Status:</strong> {String(project.status || "-").toUpperCase()}</p>
-            <p><strong>Reward:</strong> {Number.isFinite(Number(project.reward)) ? formatCurrency(project.reward) : "-"}</p>
-            <p><strong>Total Units:</strong> {project.total_units || "-"}</p>
+            <p><strong>Allocated Budget:</strong> {Number.isFinite(Number(project.reward)) ? formatCurrency(project.reward) : "-"}</p>
             <p><strong>Start Date:</strong> {project.start_date ? new Date(project.start_date).toLocaleDateString() : "-"}</p>
             <p><strong>End Date:</strong> {project.end_date ? new Date(project.end_date).toLocaleDateString() : "-"}</p>
           </div>
@@ -237,12 +236,11 @@ const ProjectDetails = () => {
                 <input className="form-control" placeholder="Project Title" value={editForm.title} onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))} />
                 <textarea className="form-control" placeholder="Project Description" value={editForm.description} onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))} />
                 <input className="form-control" placeholder="Category" value={editForm.category} onChange={(e) => setEditForm((prev) => ({ ...prev, category: e.target.value }))} />
-                <input className="form-control" type="number" placeholder="Reward Amount (INR)" value={editForm.reward} onChange={(e) => setEditForm((prev) => ({ ...prev, reward: e.target.value }))} />
+                <input className="form-control" type="number" placeholder="Allocated Budget (INR)" value={editForm.reward} onChange={(e) => setEditForm((prev) => ({ ...prev, reward: e.target.value }))} />
                 <select className="form-select" value={editForm.mode} onChange={(e) => setEditForm((prev) => ({ ...prev, mode: e.target.value }))}>
                   <option value="MARKETPLACE">MARKETPLACE</option>
                   <option value="D2C">D2C</option>
                 </select>
-                <input className="form-control" type="number" placeholder="Total Units" value={editForm.total_units} onChange={(e) => setEditForm((prev) => ({ ...prev, total_units: e.target.value }))} />
                 <input className="form-control" type="date" value={editForm.start_date} onChange={(e) => setEditForm((prev) => ({ ...prev, start_date: e.target.value }))} />
                 <input className="form-control" type="date" value={editForm.end_date} onChange={(e) => setEditForm((prev) => ({ ...prev, end_date: e.target.value }))} />
                 <input className="form-control" placeholder="Primary Product URL (optional)" value={editForm.product_url} onChange={(e) => setEditForm((prev) => ({ ...prev, product_url: e.target.value }))} />

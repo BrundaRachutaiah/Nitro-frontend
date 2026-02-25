@@ -70,7 +70,7 @@ const MyAllocations = () => {
           setActiveId(matching?.id || rows[0].id);
         }
       } catch (err) {
-        setError(err.response?.data?.message || "Failed to load allocations.");
+        setError(err.response?.data?.message || "Failed to load tasks.");
       } finally {
         setLoading(false);
       }
@@ -94,14 +94,14 @@ const MyAllocations = () => {
       : Number(project?.product_value || 0);
   const totalPayout = reward + productValue;
   const projectName = project?.title || project?.name || "Campaign Product";
-  const activeMode = String(project?.mode || "").toUpperCase();
+  const requiresFeedback = String(project?.mode || "").toUpperCase() === "MARKETPLACE";
   const status = String(active?.status || "RESERVED").toUpperCase();
   const isCompleted = status === "COMPLETED";
   const isPurchased = status === "PURCHASED";
   const hasPurchaseProof = Boolean(active?.purchase_proof);
   const hasReviewSubmission = Boolean(active?.review_submission);
   const hasFeedbackSubmission = Boolean(active?.feedback_submission);
-  const requiredFlowCompleted = activeMode === "MARKETPLACE"
+  const requiredFlowCompleted = requiresFeedback
     ? hasPurchaseProof && hasReviewSubmission && hasFeedbackSubmission
     : hasPurchaseProof;
   const isReviewStepDone = hasReviewSubmission || hasFeedbackSubmission;
@@ -131,7 +131,7 @@ const MyAllocations = () => {
   }, [active, stopCountdown]);
   const participantDashboardPath = id ? `/participant/${id}/dashboard` : "/dashboard";
   const participantPayoutPath = id ? `/participant/${id}/payouts` : "/dashboard";
-  const participantAllocationPath = id ? `/participant/${id}/allocation/active` : "/dashboard";
+  const participantTasksPath = id ? `/participant/${id}/allocation/active` : "/dashboard";
 
   const getDisplayStatus = (item) => {
     const rawStatus = String(item?.status || "RESERVED").toUpperCase();
@@ -180,7 +180,6 @@ const MyAllocations = () => {
   };
 
   const getReviewLabel = (item) => {
-    const mode = String(item?.projects?.mode || "").toUpperCase();
     const review = item?.review_submission;
     const feedback = item?.feedback_submission;
     if (review) {
@@ -191,8 +190,7 @@ const MyAllocations = () => {
       return `Review ${reviewStatus}`;
     }
     if (feedback) return `Feedback submitted (${Number(feedback?.rating || 0)}/5)`;
-    if (mode === "D2C") return "Optional review not submitted";
-    return "Review/feedback not submitted";
+    return "Review not submitted";
   };
 
   const getPayoutLabel = (item) => {
@@ -252,23 +250,23 @@ const MyAllocations = () => {
         <div className="allocation-brand">Nitro</div>
         <nav>
           <button type="button" onClick={() => navigate(participantDashboardPath)}>Dashboard</button>
-          <button type="button" className="active">Allocations</button>
+          <button type="button" className="active">My Tasks</button>
           <button type="button" onClick={() => navigate(participantPayoutPath)}>Payouts</button>
         </nav>
       </header>
 
       <main className="allocation-main-shell">
         <section className="allocation-main-head">
-          <h1>Active Allocation</h1>
-          <p>Manage your product sampling and reservation progress.</p>
+          <h1>My Tasks</h1>
+          <p>Complete each step in order to finish your program.</p>
         </section>
 
-        {loading ? <p className="allocation-loading">Loading allocations...</p> : null}
+        {loading ? <p className="allocation-loading">Loading tasks...</p> : null}
         {error ? <p className="allocation-error">{error}</p> : null}
 
         {!loading && !data.length ? (
           <div className="allocation-empty">
-            <p>No active allocations available.</p>
+            <p>No active tasks available.</p>
             <button type="button" onClick={() => navigate(participantDashboardPath)}>Back to Dashboard</button>
           </div>
         ) : (
@@ -295,6 +293,54 @@ const MyAllocations = () => {
               <div><strong>{String(timeLeft.hours).padStart(2, "0")}</strong><span>HOURS</span></div>
               <div><strong>{String(timeLeft.mins).padStart(2, "0")}</strong><span>MINS</span></div>
               <div><strong>{String(timeLeft.secs).padStart(2, "0")}</strong><span>SECS</span></div>
+            </section>
+
+            <section className="allocation-upload-card">
+              <h2>Current Task</h2>
+              {!isPurchaseConfirmed ? (
+                <>
+                  <p>Confirm that you purchased <strong>{projectName}</strong> to unlock the next steps.</p>
+                  <div className="allocation-actions">
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => markPurchaseDecision(true)}
+                      disabled={hasPurchaseProof || isCompleted || purchaseSaving}
+                    >
+                      {purchaseSaving ? "Saving..." : "I Purchased This Product"}
+                    </button>
+                  </div>
+                </>
+              ) : !hasPurchaseProof ? (
+                <>
+                  <p>Upload invoice proof for <strong>{projectName}</strong>.</p>
+                  <div className="allocation-actions">
+                    <button type="button" className="primary" onClick={() => navigate(`/participant/${id}/upload-proof/${active?.id || ""}`)}>
+                      Upload Invoice
+                    </button>
+                  </div>
+                </>
+              ) : !hasReviewSubmission ? (
+                <>
+                  <p>Submit your product review.</p>
+                  <div className="allocation-actions">
+                    <button type="button" className="primary" onClick={() => navigate(`/participant/${id}/submit-review/${active?.id || ""}`)}>
+                      Submit Review
+                    </button>
+                  </div>
+                </>
+              ) : requiresFeedback && !hasFeedbackSubmission ? (
+                <>
+                  <p>Submit your final feedback to complete this task.</p>
+                  <div className="allocation-actions">
+                    <button type="button" className="primary" onClick={() => navigate(`/participant/${id}/submit-review/${active?.id || ""}`)}>
+                      Submit Feedback
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p>All required tasks are complete. You can check payout status on the Payouts page.</p>
+              )}
             </section>
 
             <section className="allocation-journey">
@@ -325,49 +371,32 @@ const MyAllocations = () => {
                 </div>
               </div>
               <div className={`journey-step ${hasPurchaseProof || isCompleted ? "done" : isPurchaseConfirmed ? "active" : ""}`}>
-                <h3>Upload Purchase Proof</h3>
+                <h3>Upload Invoice</h3>
                 <p>
                   {hasPurchaseProof || isCompleted
                     ? "Completed"
                     : isPurchaseConfirmed
                       ? `Due in ${daysLeft} days`
-                      : "Mark purchase as Yes to continue"}
+                      : "Complete purchase confirmation first"}
                 </p>
               </div>
               <div className={`journey-step ${isReviewStepDone ? "done" : isReviewStepActive ? "active" : "locked"}`}>
-                <h3>{activeMode === "MARKETPLACE" ? "Review + Feedback" : "Review (Optional for D2C)"}</h3>
+                <h3>Submit Review</h3>
                 <p>
                   {isReviewStepDone
                     ? "Completed"
-                    : activeMode === "MARKETPLACE"
-                      ? "Submit review proof and feedback after purchase proof approval"
-                      : "You may submit review after purchase proof approval"}
+                    : "Submit review after purchase proof approval"}
                 </p>
               </div>
             </section>
 
-            {!hasPurchaseProof ? (
-              <section className="allocation-upload-card">
-                <h2>Upload Purchase Proof</h2>
-                <p>
-                  Please purchase <strong>{projectName}</strong> and upload a clear screenshot of your receipt.
-                </p>
-                <div className="allocation-actions">
-                  <button type="button" className="primary" onClick={() => navigate(`/participant/${id}/upload-proof/${active?.id || ""}`)}>
-                    Upload Invoice / Proof
-                  </button>
-                </div>
-              </section>
-            ) : null}
-
             <section className="allocation-track-list">
-              <h2>Your Allocation Tracking</h2>
+              <h2>Task Tracking</h2>
               <div className="allocation-track-table-wrap">
                 <table>
                   <thead>
                     <tr>
                       <th>Project</th>
-                      <th>Mode</th>
                       <th>Status</th>
                       <th>Purchase Proof</th>
                       <th>Review / Feedback</th>
@@ -379,7 +408,7 @@ const MyAllocations = () => {
                     {data.map((item) => {
                       const itemProject = item?.projects || {};
                       const name = itemProject?.title || itemProject?.name || "Untitled";
-                      const mode = String(itemProject?.mode || "-").toUpperCase();
+                      const mode = String(itemProject?.mode || "").toUpperCase();
                       const itemStatus = getDisplayStatus(item);
                       const reservedUntil = item?.reserved_until
                         ? new Date(item.reserved_until).toLocaleString()
@@ -388,7 +417,6 @@ const MyAllocations = () => {
                       return (
                         <tr key={`track-${item.id}`}>
                           <td>{name}</td>
-                          <td>{mode}</td>
                           <td>
                             <span className={`status-chip status-${itemStatus.toLowerCase()}`}>
                               {itemStatus}
@@ -426,16 +454,16 @@ const MyAllocations = () => {
                                   className="secondary"
                                   onClick={() => navigate(`/participant/${id}/submit-review/${item.id}`)}
                                 >
-                                  {mode === "MARKETPLACE" ? "Submit Mandatory Review Proof" : "Submit Optional D2C Review"}
+                                  Submit Review
                                 </button>
                               ) : null}
                               {mode === "MARKETPLACE" && !item?.feedback_submission ? (
                                 <button
                                   type="button"
                                   className="secondary"
-                                  onClick={() => navigate(`/participant/${id}/submit-feedback/${item.id}`)}
+                                  onClick={() => navigate(`/participant/${id}/submit-review/${item.id}`)}
                                 >
-                                  Submit Mandatory Feedback
+                                  Submit Feedback
                                 </button>
                               ) : null}
                             </div>
@@ -504,7 +532,7 @@ const MyAllocations = () => {
               <article>
                 <h3>Need Help?</h3>
                 <p>Contact support if you face issues with purchase or proof upload.</p>
-                <button type="button" onClick={() => navigate(participantAllocationPath)}>Refresh Allocation</button>
+                <button type="button" onClick={() => navigate(participantTasksPath)}>Refresh Tasks</button>
               </article>
             </section>
           </>

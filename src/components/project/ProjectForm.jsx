@@ -11,7 +11,7 @@ const ProjectForm = () => {
     category: "",
     reward: "",
     mode: "MARKETPLACE",
-    total_units: "",
+    total_units: "1",
     start_date: "",
     end_date: "",
     product_url: "",
@@ -40,6 +40,24 @@ const ProjectForm = () => {
     setError("");
     setMessage("");
 
+    const requiredMissing = !form.title.trim()
+      || !form.description.trim()
+      || !form.category.trim()
+      || !String(form.reward).trim()
+      || !form.mode
+      || !form.start_date
+      || !form.end_date;
+
+    if (requiredMissing) {
+      setError("Please fill all required project details.");
+      return;
+    }
+
+    if (Number(form.reward) <= 0) {
+      setError("Allocated budget must be greater than 0.");
+      return;
+    }
+
     const cleanedProducts = form.products
       .map((product) => ({
         name: product.name.trim(),
@@ -62,7 +80,7 @@ const ProjectForm = () => {
         category: form.category.trim(),
         reward: Number(form.reward),
         mode: form.mode,
-        total_units: Number(form.total_units),
+        total_units: Number(form.total_units || 1),
         start_date: form.start_date,
         end_date: form.end_date,
         product_url: form.product_url.trim() || cleanedProducts[0].product_url,
@@ -76,7 +94,7 @@ const ProjectForm = () => {
         category: "",
         reward: "",
         mode: "MARKETPLACE",
-        total_units: "",
+        total_units: "1",
         start_date: "",
         end_date: "",
         product_url: "",
@@ -95,14 +113,13 @@ const ProjectForm = () => {
       <input placeholder="Project Title" className="form-control" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value, name: e.target.value })} />
       <textarea placeholder="Project Description" className="form-control" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
       <input placeholder="Category" className="form-control" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-      <input placeholder="Reward Amount (INR)" type="number" className="form-control" value={form.reward} onChange={(e) => setForm({ ...form, reward: e.target.value })} />
+      <input placeholder="Allocated Budget (INR)" type="number" className="form-control" value={form.reward} onChange={(e) => setForm({ ...form, reward: e.target.value })} />
 
       <select className="form-select" value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
         <option value="MARKETPLACE">Marketplace</option>
         <option value="D2C">D2C</option>
       </select>
 
-      <input placeholder="Total Units" type="number" className="form-control" value={form.total_units} onChange={(e) => setForm({ ...form, total_units: e.target.value })} />
       <input type="date" className="form-control" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
       <input type="date" className="form-control" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
       <input placeholder="Primary Product URL (optional)" className="form-control" value={form.product_url} onChange={(e) => setForm({ ...form, product_url: e.target.value })} />

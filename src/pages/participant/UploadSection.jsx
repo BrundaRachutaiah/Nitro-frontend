@@ -71,9 +71,15 @@ const UploadSection = () => {
       .filter((row) => row?.purchase_proof?.created_at || row?.purchase_proof?.uploaded_at)
       .map((row) => {
         const projectName = row?.projects?.title || row?.projects?.name || "Untitled Project";
+        const productName = row?.selected_product?.name || "Product not linked";
+        const proofStatus = String(row?.purchase_proof?.status || "PENDING").toUpperCase();
         return {
           key: `up-${row?.purchase_proof?.id || row?.id}`,
           at: row?.purchase_proof?.created_at || row?.purchase_proof?.uploaded_at,
+          projectName,
+          productName,
+          status: proofStatus,
+          proofUrl: row?.purchase_proof?.file_url || "",
           text: `Invoice uploaded to ${projectName}`
         };
       })
@@ -85,9 +91,16 @@ const UploadSection = () => {
       .filter((row) => row?.review_submission?.created_at)
       .map((row) => {
         const projectName = row?.projects?.title || row?.projects?.name || "Untitled Project";
+        const productName = row?.selected_product?.name || "Product not linked";
+        const reviewStatus = String(row?.review_submission?.status || "PENDING").toUpperCase();
         return {
           key: `rv-${row?.review_submission?.id || row?.id}`,
           at: row?.review_submission?.created_at,
+          projectName,
+          productName,
+          status: reviewStatus,
+          reviewText: String(row?.review_submission?.review_text || "").trim(),
+          reviewUrl: row?.review_submission?.review_url || "",
           text: `Review uploaded to ${projectName}`
         };
       })
@@ -126,18 +139,42 @@ const UploadSection = () => {
           {error ? <div className="participant-alert">{error}</div> : null}
           {loading ? <div className="participant-empty-card">Loading upload history...</div> : null}
           {!loading ? (
-            <div className="participant-history-grid">
+            <div className="participant-history-grid participant-history-grid-stack">
               <article className="participant-history-card">
                 <h3>Invoice Upload History</h3>
                 {uploadHistory.length ? (
-                  <ul>
-                    {uploadHistory.map((item) => (
-                      <li key={item.key}>
-                        <strong>{item.text}</strong>
-                        <span>{item.at ? new Date(item.at).toLocaleString() : "-"}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="participant-applied-table-wrap">
+                    <table className="participant-applied-table">
+                      <thead>
+                        <tr>
+                          <th>Project</th>
+                          <th>Product</th>
+                          <th>Upload</th>
+                          <th>Status</th>
+                          <th>Date & Time</th>
+                          <th>Proof</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {uploadHistory.map((item) => (
+                          <tr key={item.key}>
+                            <td>{item.projectName}</td>
+                            <td>{item.productName}</td>
+                            <td>Invoice</td>
+                            <td>{item.status}</td>
+                            <td>{item.at ? new Date(item.at).toLocaleString() : "-"}</td>
+                            <td>
+                              {item.proofUrl ? (
+                                <a href={item.proofUrl} target="_blank" rel="noreferrer">View</a>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
                   <p>No invoice uploads yet.</p>
                 )}
@@ -146,14 +183,42 @@ const UploadSection = () => {
               <article className="participant-history-card">
                 <h3>Review Upload History</h3>
                 {reviewHistory.length ? (
-                  <ul>
-                    {reviewHistory.map((item) => (
-                      <li key={item.key}>
-                        <strong>{item.text}</strong>
-                        <span>{item.at ? new Date(item.at).toLocaleString() : "-"}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="participant-applied-table-wrap">
+                    <table className="participant-applied-table">
+                      <thead>
+                        <tr>
+                          <th>Project</th>
+                          <th>Product</th>
+                          <th>Upload</th>
+                          <th>Status</th>
+                          <th>Date & Time</th>
+                          <th>Review</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reviewHistory.map((item) => (
+                          <tr key={item.key}>
+                            <td>{item.projectName}</td>
+                            <td>{item.productName}</td>
+                            <td>Review</td>
+                            <td>{item.status}</td>
+                            <td>{item.at ? new Date(item.at).toLocaleString() : "-"}</td>
+                            <td>
+                              {item.reviewUrl ? (
+                                <a href={item.reviewUrl} target="_blank" rel="noreferrer">View</a>
+                              ) : item.reviewText ? (
+                                item.reviewText.length > 120
+                                  ? `${item.reviewText.slice(0, 120)}...`
+                                  : item.reviewText
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
                   <p>No review uploads yet.</p>
                 )}

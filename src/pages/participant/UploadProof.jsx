@@ -33,7 +33,7 @@ const UploadProof = () => {
           setAllocationId(fromRoute);
         }
       } catch (err) {
-        setError(err.response?.data?.message || "Unable to load allocations.");
+        setError(err.response?.data?.message || "Unable to load tasks.");
       } finally {
         setLoading(false);
       }
@@ -53,7 +53,7 @@ const UploadProof = () => {
     setMessage("");
 
     if (!allocationId || !file) {
-      setError("Allocation ID and proof file are required.");
+      setError("Please select a task and upload proof.");
       return;
     }
 
@@ -74,7 +74,7 @@ const UploadProof = () => {
         <div className="participant-upload-brand">Nitro</div>
         <nav>
           <button type="button" onClick={() => navigate(participantDashboardPath)}>Dashboard</button>
-          <button type="button" className="active" onClick={() => navigate(participantAllocationPath)}>Allocations</button>
+          <button type="button" className="active" onClick={() => navigate(participantAllocationPath)}>My Tasks</button>
           <button type="button" onClick={() => navigate(participantPayoutPath)}>Payouts</button>
         </nav>
       </header>
@@ -83,24 +83,24 @@ const UploadProof = () => {
         <header className="participant-action-header">
           <div>
             <h1>Upload Purchase Proof</h1>
-            <p>Select allocation, upload invoice/screenshot, and submit for admin verification.</p>
+            <p>Select a task, upload invoice/screenshot, and submit for admin verification.</p>
           </div>
           <button type="button" className="participant-action-back" onClick={() => navigate(participantAllocationPath)}>
-            Back to Allocations
+            Back to My Tasks
           </button>
         </header>
 
         <section className="participant-action-card">
           {error ? <p className="participant-action-error">{error}</p> : null}
           {message ? <p className="participant-action-success">{message}</p> : null}
-          {loading ? <p className="participant-action-muted">Loading allocations...</p> : null}
+          {loading ? <p className="participant-action-muted">Loading tasks...</p> : null}
           {!loading && !allocations.length ? (
-            <p className="participant-action-muted">No pending allocations found for proof upload.</p>
+            <p className="participant-action-muted">No pending tasks found for proof upload.</p>
           ) : null}
 
           {!loading && allocations.length ? (
             <form onSubmit={handleSubmit} className="participant-action-form">
-              <label htmlFor="allocationId">Allocation</label>
+              <label htmlFor="allocationId">Task</label>
               <select id="allocationId" value={allocationId} onChange={(e) => setAllocationId(e.target.value)}>
                 {allocations.map((row) => {
                   const title = row?.projects?.title || row?.projects?.name || row.id;
@@ -114,7 +114,7 @@ const UploadProof = () => {
 
               {selectedAllocation ? (
                 <p className="participant-action-note">
-                  Mode: {String(selectedAllocation?.projects?.mode || "-").toUpperCase()} | Status: {String(selectedAllocation?.status || "-").toUpperCase()}
+                  Status: {String(selectedAllocation?.status || "-").toUpperCase()}
                 </p>
               ) : null}
 

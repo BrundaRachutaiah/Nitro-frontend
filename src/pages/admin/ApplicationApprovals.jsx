@@ -47,15 +47,6 @@ const ApplicationApprovals = () => {
       path: "/admin/applications/login-requests"
     },
     {
-      key: "project_unlock_requests",
-      label: "Project Unlock Requests",
-      pending: summary?.project_unlock_requests?.pending_count || 0,
-      approved: summary?.project_unlock_requests?.approved_count || 0,
-      rejected: summary?.project_unlock_requests?.rejected_count || 0,
-      total: summary?.project_unlock_requests?.total_requested || 0,
-      path: "/admin/applications/project-unlock-requests"
-    },
-    {
       key: "product_applications",
       label: "Product Applications",
       pending: summary?.product_applications?.pending_count || 0,
@@ -65,24 +56,25 @@ const ApplicationApprovals = () => {
       path: "/admin/applications/product-applications"
     },
     {
-      key: "invoice_submissions",
-      label: "Invoice Upload Submissions",
-      pending: summary?.invoice_submissions?.pending_count || 0,
-      approved: summary?.invoice_submissions?.approved_count || 0,
-      rejected: summary?.invoice_submissions?.rejected_count || 0,
-      total: summary?.invoice_submissions?.total_requested || 0,
-      path: "/admin/verification?uploadType=invoice&status=ALL"
-    },
-    {
-      key: "review_submissions",
-      label: "Review Upload Submissions",
-      pending: summary?.review_submissions?.pending_count || 0,
-      approved: summary?.review_submissions?.approved_count || 0,
-      rejected: summary?.review_submissions?.rejected_count || 0,
-      total: summary?.review_submissions?.total_requested || 0,
-      path: "/admin/verification?uploadType=review&status=ALL"
+      key: "invoice_review_submissions",
+      label: "Invoice + Review Submissions",
+      pending: (summary?.invoice_submissions?.pending_count || 0) + (summary?.review_submissions?.pending_count || 0),
+      approved: (summary?.invoice_submissions?.approved_count || 0) + (summary?.review_submissions?.approved_count || 0),
+      rejected: (summary?.invoice_submissions?.rejected_count || 0) + (summary?.review_submissions?.rejected_count || 0),
+      total: (summary?.invoice_submissions?.total_requested || 0) + (summary?.review_submissions?.total_requested || 0),
+      path: "/admin/verification?uploadType=ALL&status=ALL"
     }
   ];
+
+  const visibleSummary = rows.reduce(
+    (acc, row) => ({
+      pending: acc.pending + row.pending,
+      approved: acc.approved + row.approved,
+      rejected: acc.rejected + row.rejected,
+      total: acc.total + row.total
+    }),
+    { pending: 0, approved: 0, rejected: 0, total: 0 }
+  );
 
   return (
     <div className="admin-page">
@@ -140,10 +132,10 @@ const ApplicationApprovals = () => {
               ))}
               <tr>
                 <td><strong>Final Summary</strong></td>
-                <td><strong>{summary?.final_summary?.pending_total || 0}</strong></td>
-                <td><strong>{summary?.final_summary?.total_approved || 0}</strong></td>
-                <td><strong>{summary?.final_summary?.total_rejected || 0}</strong></td>
-                <td><strong>{summary?.final_summary?.total_requested || 0}</strong></td>
+                <td><strong>{visibleSummary.pending}</strong></td>
+                <td><strong>{visibleSummary.approved}</strong></td>
+                <td><strong>{visibleSummary.rejected}</strong></td>
+                <td><strong>{visibleSummary.total}</strong></td>
                 <td>
                   <button
                     type="button"

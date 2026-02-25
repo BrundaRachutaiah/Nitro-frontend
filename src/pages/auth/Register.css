@@ -4,11 +4,11 @@
 }
 
 .register-shell {
-  max-width: 460px;
+  max-width: 420px;
 }
 
 .register-brand {
-  font-size: clamp(2.5rem, 7vw, 3.5rem);
+  font-size: clamp(2rem, 5vw, 2.8rem);
   font-weight: 700;
   line-height: 1;
   color: #111a22;
@@ -18,7 +18,7 @@
   color: #4f7684;
   font-weight: 500;
   letter-spacing: 0.2em;
-  font-size: clamp(0.85rem, 2.8vw, 1.35rem);
+  font-size: clamp(0.75rem, 2.2vw, 1.05rem);
 }
 
 .register-card {
@@ -27,8 +27,30 @@
   background: #f8fbfb;
 }
 
+.register-stepper {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.register-step-pill {
+  border: 1px solid #bcd0d8;
+  background: #eff6f8;
+  color: #3f5f6e;
+  border-radius: 999px;
+  height: 38px;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.register-step-pill.active {
+  border-color: #08a4c8;
+  background: #08a4c8;
+  color: #fff;
+}
+
 .register-title {
-  font-size: clamp(2rem, 6vw, 2.6rem);
+  font-size: clamp(1.5rem, 4vw, 2.1rem);
   font-weight: 700;
   color: #101718;
 }
@@ -36,15 +58,15 @@
 .register-label {
   font-weight: 700;
   color: #101718;
-  font-size: 1rem;
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
 }
 
 .register-input {
-  height: 56px;
+  height: 52px;
   border-radius: 0.8rem;
   border: 1px solid #cfd8dc;
   background: #f8fbfb;
-  font-size: 1rem;
+  font-size: clamp(0.95rem, 2vw, 1.05rem);
   color: #24404d;
 }
 
@@ -53,16 +75,31 @@
   box-shadow: none;
 }
 
+.register-eye {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #5f8290;
+  border: 0;
+  padding: 0.25rem;
+}
+
+.register-eye-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
 .register-submit {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 58px;
+  height: 52px;
   border-radius: 0.8rem;
   border: 3px solid #08a4c8 !important;
   background: #08a4c8 !important;
   color: #fff !important;
-  font-size: 1.2rem;
+  font-size: clamp(1rem, 2.2vw, 1.2rem);
   font-weight: 700;
   line-height: 1;
   padding: 0 1rem;
@@ -84,7 +121,7 @@
 }
 
 .register-google-btn {
-  height: 58px;
+  height: 52px;
   border-radius: 0.8rem;
   font-weight: 600;
 }
@@ -96,7 +133,7 @@
 
 .register-login {
   color: #4f7684;
-  font-size: 1rem;
+  font-size: clamp(0.92rem, 2vw, 1rem);
   font-weight: 500;
 }
 
@@ -107,4 +144,57 @@
 
 .register-link:hover {
   text-decoration: underline;
+}
+
+.register-section-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #101718;
+}
+
+.register-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+.register-back-btn {
+  height: 52px;
+  border-radius: 0.8rem;
+  border: 1px solid #b9ccd5;
+  background: #eef5f7;
+  color: #355361;
+  font-size: clamp(1rem, 2vw, 1.1rem);
+  font-weight: 700;
+}
+
+@media (min-width: 992px) {
+  .register-shell {
+    max-width: 400px;
+  }
+
+  .register-page {
+    padding-top: 2.25rem !important;
+    padding-bottom: 2.25rem !important;
+  }
+
+  .register-card .card-body {
+    padding: 1.5rem !important;
+  }
+
+  .register-title {
+    font-size: 2rem;
+  }
+
+  .register-label {
+    font-size: 1.02rem;
+  }
+
+  .register-input,
+  .register-submit,
+  .register-google-btn,
+  .register-back-btn {
+    height: 50px;
+  }
 }

@@ -1,6 +1,8 @@
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY;
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || import.meta.env.API_BASE_URL || "http://localhost:5000";
 
 const LOCAL_TOKEN_KEY = "nitro_access_token";
 const SESSION_TOKEN_KEY = "nitro_session_access_token";
@@ -57,10 +59,26 @@ const storeToken = (token, rememberMe = true) => {
   sessionStorage.setItem(SESSION_TOKEN_KEY, token);
 };
 
-const signInWithSupabase = async ({ email, password }) => {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new Error("Missing Supabase frontend environment variables.");
+const assertSupabaseFrontendEnv = () => {
+  const missing = [];
+
+  if (!SUPABASE_URL) {
+    missing.push("VITE_SUPABASE_URL (or SUPABASE_URL)");
   }
+
+  if (!SUPABASE_ANON_KEY) {
+    missing.push("VITE_SUPABASE_ANON_KEY (or SUPABASE_ANON_KEY)");
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing Supabase frontend environment variables: ${missing.join(", ")}.`
+    );
+  }
+};
+
+const signInWithSupabase = async ({ email, password }) => {
+  assertSupabaseFrontendEnv();
 
   const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: "POST",
@@ -80,10 +98,8 @@ const signInWithSupabase = async ({ email, password }) => {
   return data.access_token;
 };
 
-const signUpWithSupabase = async ({ email, password, fullName }) => {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new Error("Missing Supabase frontend environment variables.");
-  }
+const signUpWithSupabase = async ({ email, password, fullName, phone, registrationDetails = {} }) => {
+  assertSupabaseFrontendEnv();
 
   const response = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
     method: "POST",
@@ -96,7 +112,9 @@ const signUpWithSupabase = async ({ email, password, fullName }) => {
       email,
       password,
       data: {
-        full_name: fullName || ""
+        full_name: fullName || "",
+        phone: phone || "",
+        registration_details: registrationDetails || {}
       }
     })
   });
@@ -105,9 +123,7 @@ const signUpWithSupabase = async ({ email, password, fullName }) => {
 };
 
 const resendSignupConfirmation = async (email) => {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new Error("Missing Supabase frontend environment variables.");
-  }
+  assertSupabaseFrontendEnv();
 
   if (!email) {
     throw new Error("Email is required.");
@@ -164,6 +180,30 @@ const signOutFromSupabase = async (token) => {
   });
 };
 
+const requestEmailUpdateInSupabase = async ({ token, email }) => {
+  assertSupabaseFrontendEnv();
+
+  if (!token) {
+    throw new Error("Missing access token for email update.");
+  }
+
+  if (!email) {
+    throw new Error("Email is required.");
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    method: "PUT",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ email })
+  });
+
+  return parseResponse(response);
+};
+
 const getGoogleAuthorizeUrl = () => {
   if (!SUPABASE_URL) {
     throw new Error("Missing Supabase URL.");
@@ -205,6 +245,7 @@ export {
   signInWithSupabase,
   signUpWithSupabase,
   resendSignupConfirmation,
+  requestEmailUpdateInSupabase,
   signOutFromSupabase,
   storeToken,
   verifyBackendUser

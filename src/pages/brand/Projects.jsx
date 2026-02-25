@@ -100,7 +100,6 @@ const Projects = () => {
       <div className="project-grid">
         {filtered.map((project) => {
           const title = project?.title || project?.name || "Untitled Project";
-          const totalUnits = Number(project?.total_units) || 0;
           const reward = Number(project?.reward);
           const projectMode = String(project?.mode || "MARKETPLACE").toUpperCase();
 
@@ -125,9 +124,8 @@ const Projects = () => {
                 </div>
                 <h3>{title}</h3>
                 <p>Status: {String(project?.status || "draft").toUpperCase()}</p>
-                <p>Units Sampled: {totalUnits}</p>
                 <strong>
-                  {Number.isFinite(reward) ? `Reward: ${formatCurrency(reward)}` : "Reward: TBD"}
+                  {Number.isFinite(reward) ? `Allocated Budget: ${formatCurrency(reward)}` : "Allocated Budget: TBD"}
                 </strong>
               </div>
             </article>
