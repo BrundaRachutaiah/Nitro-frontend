@@ -149,88 +149,45 @@ const ParticipantDashboard = () => {
 
       const nextCatalog = Array.isArray(catalogRes?.data?.data) ? catalogRes.data.data : [];
 
-      // For the verified unlocked map — still only check APPROVED projects
-      const unlockedProjectIds = nextCatalog
-        .filter((item) => String(item?.access_status || "").toUpperCase() === "APPROVED")
-        .map((item) => item?.id)
+      // Also include projects from /projects/active that may not appear in catalog
+      const activeProjectItems = Array.isArray(activeRes?.data) ? activeRes.data : [];
+      const activeProjectsFromActive = activeProjectItems
+        .map((row) => row?.projects)
         .filter(Boolean);
 
-      const verifiedEntries = await Promise.all(
-        unlockedProjectIds.map(async (projectId) => {
-          try {
-            const productsRes = await fetchJson(`/projects/${projectId}/products`, token);
-            const products = Array.isArray(productsRes?.data?.products) ? productsRes.data.products : [];
-            const validProductIds = products.filter((item) => {
-              const name = String(item?.name || "").trim();
-              const url = String(item?.product_url || "").trim();
-              const value = Number(item?.product_value || item?.price || 0);
-              return Boolean(name && url && value > 0 && item?.id);
-            }).map((item) => item.id);
+      // Merge catalog + active projects, deduplicated by project id
+      const catalogIds = new Set(nextCatalog.map((p) => p.id));
+      const extraProjects = activeProjectsFromActive.filter((p) => p?.id && !catalogIds.has(p.id));
+      const allProjects = [...nextCatalog, ...extraProjects];
 
-            if (!validProductIds.length) {
-              return [projectId, false];
-            }
-
-            const consumed = consumedProductIdsByProject.get(projectId) || new Set();
-            const hasRemainingProducts = validProductIds.some((productId) => !consumed.has(productId));
-            return [projectId, hasRemainingProducts];
-          } catch {
-            return [projectId, false];
-          }
-        })
-      );
-      setVerifiedUnlockedProductMap(Object.fromEntries(verifiedEntries));
-
-      // Use ALL catalog projects — show every product to everyone
+      // Fetch products for ALL active projects — no access-request permission needed
       const productBuckets = await Promise.all(
-        nextCatalog.map(async (project) => {
+        allProjects.map(async (project) => {
           try {
             const productsRes = await fetchJson(`/projects/${project.id}/products`, token);
             const rows = Array.isArray(productsRes?.data?.products) ? productsRes.data.products : [];
             return rows.map((product) => ({
-  ...product,
-  project_id: project.id,
-  project_title: project?.title || project?.name || "Project",
-  project_category: project?.category || "General",
-  created_by_name: project?.created_by_name || "Client",
-  selection_key: `${project.id}::${product.id}`,
-  project_start_date: project?.start_date || null,
-  project_end_date: project?.end_date || null
-}));
+              ...product,
+              project_id: project.id,
+              project_title: project?.title || project?.name || "Project",
+              project_category: project?.category || "General",
+              created_by_name: project?.created_by_name || "Client",
+              selection_key: `${project.id}::${product.id}`,
+            }));
           } catch (err) {
             return [];
           }
         })
       );
 
-      const todayKey = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Kolkata",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit"
-}).format(new Date());
+      // Simple validity filter — backend already handles date range filtering
+      const nextProducts = productBuckets.flat().filter((item) => {
+        const name = String(item?.name || "").trim();
+        const url = String(item?.product_url || "").trim();
+        return Boolean(name && url && item?.id && item?.project_id);
+      });
 
-const nextProducts = productBuckets
-  .flat()
-  .filter((item) => {
-    const name = String(item?.name || "").trim();
-    const url = String(item?.product_url || "").trim();
-    const value = Number(item?.product_value || item?.price || 0);
-    if (!name || !url || !value || !item?.id || !item?.project_id) return false;
-
-    // Hide products from expired or not-yet-started projects
-    const startKey = item?.project_start_date
-      ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(item.project_start_date))
-      : null;
-    const endKey = item?.project_end_date
-      ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(item.project_end_date))
-      : null;
-
-    if (startKey && todayKey < startKey) return false;
-    if (endKey && todayKey > endKey) return false;
-
-    return true;
-  });
+      setVerifiedUnlockedProductMap({});
       setDashboardProducts(nextProducts);
 
       // Always start with no products pre-selected
@@ -388,7 +345,7 @@ const nextProducts = productBuckets
           fetchJson(`/projects/${item.project_id}/apply`, token, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ productId: item.id })
+            body: JSON.stringify({ productId: item.id || item.product_id })
           })
         )
       );
@@ -565,7 +522,6 @@ const nextProducts = productBuckets
                     <div className="participant-product-body">
                       <span className="participant-product-tag">{item?.project_category || "General"}</span>
                       <h3>{item?.name || "Product"}</h3>
-                      <p>{item?.created_by_name || "Client"}</p>
                       <p>Client: {item?.project_title || "Project"}</p>
                       <button
                         type="button"

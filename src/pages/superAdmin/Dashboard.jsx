@@ -138,6 +138,7 @@ const Dashboard = () => {
       { key: "participants", label: "Participants", icon: "participants", ref: overviewRef, path: "/super-admin/users" },
       { key: "projects", label: "Projects", icon: "projects", ref: projectsRef, path: "/projects/manage" },
       { key: "approvals", label: "Approvals", icon: "approvals", ref: overviewRef, path: "/admin/applications" },
+      { key: "client_budgets", label: "Client Budgets", icon: "payouts", ref: activityRef, path: "/admin/client-budgets" },
       { key: "payouts", label: "Payouts", icon: "payouts", ref: activityRef, path: "/admin/payouts" },
       { key: "payout_history", label: "Payout History", icon: "reports", ref: activityRef, path: "/admin/payout-history" },
       { key: "reports", label: "Reports", icon: "reports", ref: reportsRef, path: "/super-admin/reports" },

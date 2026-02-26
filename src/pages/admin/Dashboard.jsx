@@ -145,6 +145,11 @@ const Dashboard = () => {
               </button>
             </li>
             <li>
+  <button type="button" className="admin-nav-btn" onClick={() => navigate("/admin/client-budgets")}>
+    <span className="admin-nav-main"><span>Client Budgets</span></span>
+  </button>
+</li>
+            <li>
               <button type="button" className="admin-nav-btn" onClick={() => navigate("/admin/payouts")}>
                 <span className="admin-nav-main"><span>Payouts</span></span>
               </button>

@@ -36,6 +36,7 @@ import Reports from "./pages/superAdmin/Reports";
 import Brands from "./pages/superAdmin/Brands";
 import AuditLogs from "./pages/superAdmin/AuditLogs";
 import CreateProject from "./pages/admin/CreateProject";
+import ClientBudgets from './pages/admin/ClientBudgets';
 import Support from "./pages/superAdmin/Support";
 
 const RoleRoute = ({ allowedRoles, children }) => {
@@ -504,6 +505,14 @@ function App() {
           </RoleRoute>
         )}
       />
+      <Route
+  path="/admin/client-budgets"
+  element={(
+    <RoleRoute allowedRoles={["ADMIN", "SUPER_ADMIN"]}>
+      <ClientBudgets />
+    </RoleRoute>
+  )}
+/>
       <Route
         path="/admin/payouts"
         element={(

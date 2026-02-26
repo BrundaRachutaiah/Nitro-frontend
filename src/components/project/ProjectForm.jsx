@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createProject } from "../../api/project.api";
 
-const blankProduct = { name: "", product_url: "", price: "" };
+const blankProduct = { name: "", product_url: "", image_url: "", price: "" };
 
 const ProjectForm = () => {
   const [form, setForm] = useState({
@@ -62,6 +62,7 @@ const ProjectForm = () => {
       .map((product) => ({
         name: product.name.trim(),
         product_url: product.product_url.trim(),
+        image_url: product.image_url.trim(),
         price: Number(product.price || 0),
         product_value: Number(product.price || 0)
       }))
@@ -126,9 +127,10 @@ const ProjectForm = () => {
 
       <h4 style={{ marginBottom: 0 }}>Products</h4>
       {form.products.map((product, idx) => (
-        <div key={`product-${idx}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 180px 120px", gap: 8 }}>
+        <div key={`product-${idx}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 180px 120px", gap: 8 }}>
           <input placeholder="Product Name" className="form-control" value={product.name} onChange={(e) => updateProduct(idx, "name", e.target.value)} />
-          <input placeholder="Product URL" className="form-control" value={product.product_url} onChange={(e) => updateProduct(idx, "product_url", e.target.value)} />
+          <input placeholder="Product URL (Amazon/Flipkart link)" className="form-control" value={product.product_url} onChange={(e) => updateProduct(idx, "product_url", e.target.value)} />
+          <input placeholder="Product Image URL" className="form-control" value={product.image_url} onChange={(e) => updateProduct(idx, "image_url", e.target.value)} />
           <input placeholder="Price (INR)" type="number" className="form-control" value={product.price} onChange={(e) => updateProduct(idx, "price", e.target.value)} />
           <button type="button" className="admin-btn" onClick={() => removeProduct(idx)}>Remove</button>
         </div>
