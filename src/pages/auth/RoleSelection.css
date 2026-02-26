@@ -1,9 +1,9 @@
 .role-select-page {
-  min-height: 100vh;
+  min-height: calc(100vh / var(--desktop-ui-scale, 1));
   display: grid;
   place-items: center;
   background: radial-gradient(circle at 20% 0%, #1a4153 0%, #112f3c 46%, #0a202a 100%);
-  padding: 1.2rem;
+  padding: clamp(1rem, 2vw, 1.4rem);
 }
 
 .role-select-shell {
@@ -65,8 +65,8 @@
   }
 
   .role-select-page {
-    padding-top: 2rem;
-    padding-bottom: 2rem;
+    padding-top: 1.6rem;
+    padding-bottom: 1.6rem;
   }
 
   .role-select-card {

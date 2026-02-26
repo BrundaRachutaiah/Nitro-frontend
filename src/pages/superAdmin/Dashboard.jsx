@@ -200,7 +200,7 @@ const Dashboard = () => {
 
         const [summaryRes, activityRes, approvalsRes, projectsRes, performanceRes, supportRes] = await Promise.all([
           fetchJson(`/admin/dashboard/summary?${dateQuery}`, token, controller.signal),
-          fetchJson("/admin/activity?limit=5", token, controller.signal),
+          fetchJson("/admin/activity?limit=3", token, controller.signal),
           fetchJson("/admin/approvals/count", token, controller.signal),
           fetchJson("/projects", token, controller.signal),
           fetchJson(`/admin/dashboard/project-performance?${dateQuery}`, token, controller.signal),
@@ -749,7 +749,7 @@ const Dashboard = () => {
               <h2>Recent Activity</h2>
               <ul className="list-unstyled mb-0">
                 {activity.length ? (
-                  activity.map((item) => (
+                  activity.slice(0, 3).map((item) => (
                     <li key={item.id} className="activity-item">
                       <p className="activity-title">{item.action || "Activity"}</p>
                       <p className="activity-message">{item.message || item.entity_type || "Update completed"}</p>

@@ -109,10 +109,15 @@ const ClientBudgets = () => {
 
   const stats = useMemo(() => {
     const activeProjects = projects.filter((p) => String(p?.status || "").toUpperCase() === "PUBLISHED");
-    const totalBudget = activeProjects.reduce((sum, p) => sum + Number(p?.reward || 0), 0);
+    const totalBudget = activeProjects.reduce((sum, p) => sum + Number((p?.allocated_budget ?? p?.reward ?? 0)), 0);
+    const totalSpent = activeProjects.reduce((sum, p) => sum + Number(p?.spent_budget || 0), 0);
+    const totalRemaining = activeProjects.reduce(
+      (sum, p) => sum + Number(p?.remaining_budget ?? (Number((p?.allocated_budget ?? p?.reward ?? 0)) - Number(p?.spent_budget || 0))),
+      0
+    );
     const totalUnits = activeProjects.reduce((sum, p) => sum + Number(p?.total_units || 0), 0);
     const avgBudget = activeProjects.length ? totalBudget / activeProjects.length : 0;
-    return { activeCount: activeProjects.length, totalBudget, totalUnits, avgBudget };
+    return { activeCount: activeProjects.length, totalBudget, totalSpent, totalRemaining, totalUnits, avgBudget };
   }, [projects]);
 
   if (loading) return <div className="admin-loading">Loading client budgets...</div>;
@@ -221,17 +226,24 @@ const ClientBudgets = () => {
             </article>
             <article className="admin-stat-card">
               <div className="admin-stat-top">
+                <span className="admin-delta positive">Approved products</span>
+              </div>
+              <p className="admin-stat-title">Total Spent Budget</p>
+              <h3>{formatCurrency(stats.totalSpent)}</h3>
+            </article>
+            <article className="admin-stat-card">
+              <div className="admin-stat-top">
+                <span className="admin-delta positive">Available now</span>
+              </div>
+              <p className="admin-stat-title">Total Remaining Budget</p>
+              <h3>{formatCurrency(stats.totalRemaining)}</h3>
+            </article>
+            <article className="admin-stat-card">
+              <div className="admin-stat-top">
                 <span className="admin-delta positive">Across active projects</span>
               </div>
               <p className="admin-stat-title">Total Units</p>
               <h3>{stats.totalUnits}</h3>
-            </article>
-            <article className="admin-stat-card">
-              <div className="admin-stat-top">
-                <span className="admin-delta positive">Per active project</span>
-              </div>
-              <p className="admin-stat-title">Avg. Budget / Project</p>
-              <h3>{formatCurrency(stats.avgBudget)}</h3>
             </article>
           </section>
 
@@ -257,6 +269,8 @@ const ClientBudgets = () => {
                     <th>End Date</th>
                     <th>Units</th>
                     <th style={{ textAlign: "right" }}>Allocated Budget</th>
+                    <th style={{ textAlign: "right" }}>Spent</th>
+                    <th style={{ textAlign: "right" }}>Remaining</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -302,18 +316,36 @@ const ClientBudgets = () => {
                         <td style={{ textAlign: "right" }}>
                           <strong style={{
                             fontSize: 15,
-                            color: Number(project.reward || 0) > 0 ? "#166534" : "#94a3b8"
+                            color: Number((project.allocated_budget ?? project.reward ?? 0)) > 0 ? "#166534" : "#94a3b8"
                           }}>
-                            {Number(project.reward || 0) > 0
-                              ? formatCurrency(project.reward)
-                              : "—"}
+                            {Number((project.allocated_budget ?? project.reward ?? 0)) > 0
+                              ? formatCurrency((project.allocated_budget ?? project.reward ?? 0))
+                              : "-"}
+                          </strong>
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <strong style={{
+                            fontSize: 15,
+                            color: Number(project.spent_budget || 0) > 0 ? "#9a3412" : "#94a3b8"
+                          }}>
+                            {Number(project.spent_budget || 0) > 0
+                              ? formatCurrency(project.spent_budget)
+                              : "-"}
+                          </strong>
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <strong style={{
+                            fontSize: 15,
+                            color: Number(project.remaining_budget ?? 0) > 0 ? "#166534" : "#94a3b8"
+                          }}>
+                            {formatCurrency(project.remaining_budget ?? 0)}
                           </strong>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={9} style={{ textAlign: "center", color: "#94a3b8", padding: "32px 0" }}>
+                      <td colSpan={11} style={{ textAlign: "center", color: "#94a3b8", padding: "32px 0" }}>
                         No projects found.
                       </td>
                     </tr>
@@ -329,7 +361,13 @@ const ClientBudgets = () => {
                         {filtered.reduce((sum, p) => sum + Number(p?.total_units || 0), 0)}
                       </td>
                       <td style={{ textAlign: "right", fontWeight: 700, padding: "12px 10px", color: "#166534", fontSize: 16 }}>
-                        {formatCurrency(filtered.reduce((sum, p) => sum + Number(p?.reward || 0), 0))}
+                        {formatCurrency(filtered.reduce((sum, p) => sum + Number((p?.allocated_budget ?? p?.reward ?? 0)), 0))}
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: 700, padding: "12px 10px", color: "#9a3412", fontSize: 16 }}>
+                        {formatCurrency(filtered.reduce((sum, p) => sum + Number(p?.spent_budget || 0), 0))}
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: 700, padding: "12px 10px", color: "#166534", fontSize: 16 }}>
+                        {formatCurrency(filtered.reduce((sum, p) => sum + Number(p?.remaining_budget ?? (Number((p?.allocated_budget ?? p?.reward ?? 0)) - Number(p?.spent_budget || 0))), 0))}
                       </td>
                     </tr>
                   </tfoot>

@@ -33,8 +33,8 @@ const getPreviewImage = (primaryUrl, fallbackSeed = "nitro-product") => {
   return `https://picsum.photos/seed/${encodeURIComponent(fallbackSeed)}/640/420`;
 };
 
-// Returns the most recent application status for a product, or null if never applied
-const getProductApplicationStatus = (appliedProjects, productId) => {
+// Returns the most recent application row for a product, or null if never applied
+const getLatestProductApplication = (appliedProjects, productId) => {
   if (!productId || !Array.isArray(appliedProjects)) return null;
   const matches = appliedProjects.filter((row) => {
     const pid = row?.product_id || row?.project_products?.id;
@@ -42,7 +42,23 @@ const getProductApplicationStatus = (appliedProjects, productId) => {
   });
   if (!matches.length) return null;
   matches.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-  return String(matches[0]?.status || "").toUpperCase();
+  return matches[0];
+};
+const formatDateTime = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString();
+};
+
+const formatInr = (value) => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "-";
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0
+  }).format(amount);
 };
 
 const ParticipantDashboard = () => {
@@ -59,6 +75,7 @@ const ParticipantDashboard = () => {
   const [sendingProductRequest, setSendingProductRequest] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [topNav, setTopNav] = useState("dashboard");
+  const [allocationView, setAllocationView] = useState("allocation");
   const [catalogNotice, setCatalogNotice] = useState("");
   const [isFirstDashboardVisit, setIsFirstDashboardVisit] = useState(false);
   const [verifiedUnlockedProductMap, setVerifiedUnlockedProductMap] = useState({});
@@ -152,7 +169,13 @@ const ParticipantDashboard = () => {
       try {
         const notifRes = await fetchJson("/notifications", token);
         const notifs = Array.isArray(notifRes?.data) ? notifRes.data : [];
-        setApprovedNotifications(notifs.filter((n) => n.type === "PRODUCT_APPLICATION_APPROVED" && !n.is_read));
+        setApprovedNotifications(
+          notifs.filter(
+            (n) =>
+              ["PRODUCT_APPLICATION_APPROVED", "PRODUCT_APPLICATION_REJECTED"].includes(String(n.type || "").toUpperCase())
+              && !n.is_read
+          )
+        );
       } catch { /* non-critical */ }
 
     } catch (err) {
@@ -219,6 +242,21 @@ const ParticipantDashboard = () => {
   }, [dashboardProducts, selectedProductKeys]);
 
   const selectableSelectedProducts = selectedProducts;
+  const approvedRows = useMemo(
+    () =>
+      appliedProjects
+        .filter((item) => String(item?.status || "").toUpperCase() === "APPROVED")
+        .map((item) => ({
+          id: item.id,
+          projectTitle: item?.projects?.title || item?.project_id || "-",
+          productName: item?.project_products?.name || item?.product_id || "-",
+          requestedAt: item?.reviewed_at || item?.created_at || null,
+          allocationId: item?.allocation?.id || null,
+          allocationStatus: item?.allocation?.status || null
+        }))
+        .sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0)),
+    [appliedProjects]
+  );
 
   useEffect(() => {
     const userId = user?.id;
@@ -231,11 +269,38 @@ const ParticipantDashboard = () => {
     } catch { setIsFirstDashboardVisit(false); }
   }, [user?.id]);
 
-  const dismissNotification = async (notifId) => {
+  const dismissAllDecisionNotifications = async () => {
+    const ids = approvedNotifications.map((item) => item.id).filter(Boolean);
+    if (!ids.length) return;
+
     const token = getStoredToken();
-    setApprovedNotifications((prev) => prev.filter((n) => n.id !== notifId));
-    try { await fetchJson(`/notifications/${notifId}/read`, token, { method: "PATCH" }); } catch { /* ignore */ }
+    setApprovedNotifications([]);
+    try {
+      await Promise.all(
+        ids.map((id) => fetchJson(`/notifications/${id}/read`, token, { method: "PATCH" }))
+      );
+    } catch { /* ignore */ }
   };
+
+  const decisionNotificationSummary = useMemo(() => {
+    if (!approvedNotifications.length) return null;
+
+    const uniqueMessages = [];
+    const seen = new Set();
+    for (const item of approvedNotifications) {
+      const message = String(item?.message || "").trim();
+      if (!message) continue;
+      if (!seen.has(message)) {
+        seen.add(message);
+        uniqueMessages.push(message);
+      }
+    }
+
+    return {
+      count: approvedNotifications.length,
+      lines: uniqueMessages
+    };
+  }, [approvedNotifications]);
 
   const toggleProductSelection = (selectionKey) => {
     setSelectedProductKeys((prev) =>
@@ -332,81 +397,162 @@ const ParticipantDashboard = () => {
           </div>
         ) : null}
 
-        {approvedNotifications.map((notif) => (
-          <div key={notif.id} style={{ marginTop: "1rem", background: "rgba(16,107,66,0.28)", border: "1px solid rgba(56,214,139,0.5)", color: "#c8ffe7", padding: "0.85rem 1rem", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
+        {decisionNotificationSummary ? (
+          <div style={{ marginTop: "1rem", background: "rgba(16,107,66,0.28)", border: "1px solid rgba(56,214,139,0.5)", color: "#c8ffe7", padding: "0.85rem 1rem", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
             <div>
-              <strong style={{ display: "block", marginBottom: "0.25rem", color: "#38e2a0" }}>{notif.title}</strong>
-              <span style={{ fontSize: "0.93rem" }}>{notif.message}</span>
+              <strong style={{ display: "block", marginBottom: "0.25rem", color: "#38e2a0" }}>
+                Product request updates ({decisionNotificationSummary.count})
+              </strong>
+              <ul style={{ margin: 0, paddingLeft: "1.1rem", fontSize: "0.93rem" }}>
+                {decisionNotificationSummary.lines.map((line) => (
+                  <li key={line} style={{ marginBottom: "0.3rem" }}>{line}</li>
+                ))}
+              </ul>
             </div>
-            <button type="button" onClick={() => dismissNotification(notif.id)} style={{ background: "transparent", border: "none", color: "#38e2a0", fontWeight: 700, fontSize: "1.1rem", cursor: "pointer", flexShrink: 0 }}>✕</button>
+            <button type="button" onClick={dismissAllDecisionNotifications} style={{ background: "transparent", border: "none", color: "#38e2a0", fontWeight: 700, fontSize: "1.1rem", cursor: "pointer", flexShrink: 0 }}>✕</button>
           </div>
-        ))}
-
-        <section className="participant-available" />
+        ) : null}
 
         <section className="participant-available">
-          <div className="participant-section-head">
-            <h2>Product Allocation</h2>
+          <div className="participant-allocation-switch" role="tablist" aria-label="Allocation and approvals">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={allocationView === "allocation"}
+              className={allocationView === "allocation" ? "is-active" : ""}
+              onClick={() => setAllocationView("allocation")}
+            >
+              Product Allocation
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={allocationView === "approved"}
+              className={allocationView === "approved" ? "is-active" : ""}
+              onClick={() => setAllocationView("approved")}
+            >
+              Approved Requests
+            </button>
           </div>
-          {catalogNotice ? (
-            <div className="participant-notice-success" style={{ marginTop: 10 }}>{catalogNotice}</div>
-          ) : null}
-          <div className="participant-product-grid">
-            {filteredDashboardProducts.length ? (
-              filteredDashboardProducts.map((item) => {
-                const isSelected = selectedProductKeys.includes(item.selection_key);
-                const appStatus = getProductApplicationStatus(appliedProjects, item.id);
-                const canSelect = !appStatus || appStatus === "PURCHASED" || appStatus === "COMPLETED";
 
-                return (
-                  <article key={item.selection_key} className={`participant-product-card ${isSelected ? "is-selected" : ""}`}>
-                    <div className="participant-product-image">
-                      <img
-                        src={getPreviewImage(item?.image_url || item?.product_url, `${item.selection_key}-allocation`)}
-                        alt={item?.name || "Product"}
-                        loading="lazy"
-                      />
-                    </div>
-                    <div className="participant-product-body">
-                      <span className="participant-product-tag">{item?.project_category || "General"}</span>
-                      <h3>{item?.name || "Product"}</h3>
-                      <p>Client: {item?.project_title || "Project"}</p>
+          {allocationView === "approved" ? (
+            <div className="participant-applied-table-wrap">
+              <table className="participant-applied-table">
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Product</th>
+                    <th>Approved At</th>
+                    <th>Allocation</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {approvedRows.length ? (
+                    approvedRows.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.projectTitle}</td>
+                        <td>{row.productName}</td>
+                        <td>{formatDateTime(row.requestedAt)}</td>
+                        <td>{row.allocationId ? (row.allocationStatus || "RESERVED") : "Pending"}</td>
+                        <td>
+                          {row.allocationId ? (
+                            <button
+                              type="button"
+                              className="participant-applied-action"
+                              onClick={() => navigate(`${participantAllocationPath}?allocation=${row.allocationId}`)}
+                            >
+                              Submit Invoice & Review
+                            </button>
+                          ) : (
+                            <button type="button" className="participant-applied-action" disabled>
+                              Allocation Pending
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="participant-muted">No approved products yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <>
+              {catalogNotice ? (
+                <div className="participant-notice-success" style={{ marginTop: 10 }}>{catalogNotice}</div>
+              ) : null}
+              <div className="participant-product-grid">
+                {filteredDashboardProducts.length ? (
+                  filteredDashboardProducts.map((item) => {
+                    const isSelected = selectedProductKeys.includes(item.selection_key);
+                    const latestApplication = getLatestProductApplication(appliedProjects, item.id);
+                    const appStatus = String(latestApplication?.status || "").toUpperCase();
+                    const canSelect = !appStatus || appStatus === "PURCHASED" || appStatus === "COMPLETED";
 
-                      {appStatus === "PENDING" && (
-                        <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.4)", color: "#fbbf24", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
-                          ⏳ Request Pending — Awaiting Admin Approval
+                    return (
+                      <article key={item.selection_key} className={`participant-product-card ${isSelected ? "is-selected" : ""}`}>
+                        <div className="participant-product-image">
+                          <img
+                            src={getPreviewImage(item?.image_url || item?.product_url, `${item.selection_key}-allocation`)}
+                            alt={item?.name || "Product"}
+                            loading="lazy"
+                          />
                         </div>
-                      )}
+                        <div className="participant-product-body">
+                          <span className="participant-product-tag">{item?.project_category || "General"}</span>
+                          <h3>{item?.name || "Product"}</h3>
+                          <p>Client: {item?.project_title || "Project"}</p>
+                          <p>Price: {formatInr(item?.price ?? item?.product_value ?? item?.product_price)}</p>
 
-                      {appStatus === "REJECTED" && (
-                        <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.35)", color: "#f87171", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
-                          ❌ Admin Rejected Your Request
+                          {appStatus === "PENDING" && (
+                            <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.4)", color: "#fbbf24", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
+                              Request Pending - Awaiting Admin Approval
+                            </div>
+                          )}
+
+                          {appStatus === "REJECTED" && (
+                            <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.35)", color: "#f87171", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
+                              Admin Rejected Your Request
+                            </div>
+                          )}
+
+                          {canSelect && (
+                            <button type="button" className="participant-proof-btn participant-mini-action" onClick={() => toggleProductSelection(item.selection_key)}>
+                              {isSelected ? "Selected" : "Select Product"}
+                            </button>
+                          )}
+
+                          {appStatus === "APPROVED" && (
+                            <button
+                              type="button"
+                              className="participant-proof-btn participant-mini-action"
+                              disabled={!latestApplication?.allocation?.id}
+                              onClick={() => {
+                                if (!latestApplication?.allocation?.id) return;
+                                navigate(`${participantAllocationPath}?allocation=${latestApplication.allocation.id}`);
+                              }}
+                            >
+                              {latestApplication?.allocation?.id ? "Open Allocation" : "Allocation Pending"}
+                            </button>
+                          )}
                         </div>
-                      )}
-
-                      {appStatus === "APPROVED" && (
-                        <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.4)", color: "#34d399", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
-                          ✅ Approved — Check your active projects
-                        </div>
-                      )}
-
-                      {canSelect && (
-                        <button type="button" className="participant-proof-btn participant-mini-action" onClick={() => toggleProductSelection(item.selection_key)}>
-                          {isSelected ? "✓ Selected" : "Select Product"}
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                );
-              })
-            ) : (
-              <div className="participant-empty-card">No products available for this search right now.</div>
-            )}
-          </div>
+                      </article>
+                    );
+                  })
+                ) : (
+                  <div className="participant-empty-card">No products available for this search right now.</div>
+                )}
+              </div>
+            </>
+          )}
         </section>
       </main>
 
-      {dashboardProducts.length ? (
+      {allocationView === "allocation" && dashboardProducts.length ? (
         <div className="participant-bottom-bar">
           <div>
             <strong>{selectableSelectedProducts.length} product(s) selected</strong>
