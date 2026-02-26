@@ -69,6 +69,7 @@ const ParticipantDashboard = () => {
   const [catalogNotice, setCatalogNotice] = useState("");
   const [isFirstDashboardVisit, setIsFirstDashboardVisit] = useState(false);
   const [verifiedUnlockedProductMap, setVerifiedUnlockedProductMap] = useState({});
+  const [approvedNotifications, setApprovedNotifications] = useState([]);
 
   const displayName = useMemo(() => {
     const fullName = user?.full_name?.trim?.() || "";
@@ -124,9 +125,9 @@ const ParticipantDashboard = () => {
         ...(backendUser || {}),
         ...(profileUser || {})
       }));
+
       const nextApplied = Array.isArray(appliedRes?.data) ? appliedRes.data : [];
       const consumedProductIdsByProject = new Map();
-      const alreadyRequestedProductKeys = new Set();
 
       const pushConsumedProduct = (projectId, productId) => {
         if (!projectId || !productId) return;
@@ -138,19 +139,17 @@ const ParticipantDashboard = () => {
 
       for (const row of nextApplied) {
         const status = String(row?.status || "").toUpperCase();
-        if (!["PURCHASED", "COMPLETED"].includes(status)) continue;
         const projectId = row?.project_id || row?.projects?.id;
         const productId = row?.product_id || row?.project_products?.id;
-        pushConsumedProduct(projectId, productId);
 
-        const reqProjectId = row?.project_id || row?.projects?.id;
-        const reqProductId = row?.product_id || row?.project_products?.id;
-        if (reqProjectId && reqProductId) {
-          alreadyRequestedProductKeys.add(`${reqProjectId}::${reqProductId}`);
+        if (["PURCHASED", "COMPLETED"].includes(status)) {
+          pushConsumedProduct(projectId, productId);
         }
       }
 
       const nextCatalog = Array.isArray(catalogRes?.data?.data) ? catalogRes.data.data : [];
+
+      // For the verified unlocked map — still only check APPROVED projects
       const unlockedProjectIds = nextCatalog
         .filter((item) => String(item?.access_status || "").toUpperCase() === "APPROVED")
         .map((item) => item?.id)
@@ -182,44 +181,79 @@ const ParticipantDashboard = () => {
       );
       setVerifiedUnlockedProductMap(Object.fromEntries(verifiedEntries));
 
-      const approvedCatalog = nextCatalog;
+      // Use ALL catalog projects — show every product to everyone
       const productBuckets = await Promise.all(
-        approvedCatalog.map(async (project) => {
+        nextCatalog.map(async (project) => {
           try {
             const productsRes = await fetchJson(`/projects/${project.id}/products`, token);
             const rows = Array.isArray(productsRes?.data?.products) ? productsRes.data.products : [];
             return rows.map((product) => ({
-              ...product,
-              project_id: project.id,
-              project_title: project?.title || project?.name || "Project",
-              project_category: project?.category || "General",
-              created_by_name: project?.created_by_name || "Client",
-              selection_key: `${project.id}::${product.id}`
-            }));
-          } catch {
+  ...product,
+  project_id: project.id,
+  project_title: project?.title || project?.name || "Project",
+  project_category: project?.category || "General",
+  created_by_name: project?.created_by_name || "Client",
+  selection_key: `${project.id}::${product.id}`,
+  project_start_date: project?.start_date || null,
+  project_end_date: project?.end_date || null
+}));
+          } catch (err) {
             return [];
           }
         })
       );
 
-      const nextProducts = productBuckets
-        .flat()
-        .filter((item) => {
-          const name = String(item?.name || "").trim();
-          const url = String(item?.product_url || "").trim();
-          const value = Number(item?.product_value || item?.price || 0);
-          return Boolean(name && url && value > 0 && item?.id && item?.project_id);
-        });
+      const todayKey = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+}).format(new Date());
+
+const nextProducts = productBuckets
+  .flat()
+  .filter((item) => {
+    const name = String(item?.name || "").trim();
+    const url = String(item?.product_url || "").trim();
+    const value = Number(item?.product_value || item?.price || 0);
+    if (!name || !url || !value || !item?.id || !item?.project_id) return false;
+
+    // Hide products from expired or not-yet-started projects
+    const startKey = item?.project_start_date
+      ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(item.project_start_date))
+      : null;
+    const endKey = item?.project_end_date
+      ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(item.project_end_date))
+      : null;
+
+    if (startKey && todayKey < startKey) return false;
+    if (endKey && todayKey > endKey) return false;
+
+    return true;
+  });
       setDashboardProducts(nextProducts);
-      const preselected = Array.from(alreadyRequestedProductKeys);
-      setSelectedProductKeys(preselected);
+
+      // Always start with no products pre-selected
+      setSelectedProductKeys([]);
 
       setProfileCompletion(Number(profileRes?.data?.percentage) || 0);
       setActiveProjects(Array.isArray(activeRes?.data) ? activeRes.data : []);
       setAppliedProjects(nextApplied);
       setCatalogProjects(nextCatalog);
+
+      // Load approval notifications (non-critical)
+      try {
+        const notifRes = await fetchJson("/notifications", token);
+        const notifs = Array.isArray(notifRes?.data) ? notifRes.data : [];
+        setApprovedNotifications(
+          notifs.filter((n) => n.type === "PRODUCT_APPLICATION_APPROVED" && !n.is_read)
+        );
+      } catch {
+        // Notifications are non-critical, ignore errors
+      }
+
     } catch (err) {
-      if (/token|unauthorized|expired|forbidden|approved/i.test(err.message || "")) {
+      if (/token|unauthorized|expired|forbidden/i.test(err.message || "")) {
         clearStoredTokens();
         navigate("/login", { replace: true });
         return;
@@ -260,6 +294,7 @@ const ParticipantDashboard = () => {
     () => catalogProjects.filter((item) => String(item?.access_status || "").toUpperCase() === "APPROVED"),
     [catalogProjects]
   );
+
   const approvedWithoutAllocation = useMemo(
     () =>
       appliedProjects.filter((item) => {
@@ -303,6 +338,7 @@ const ParticipantDashboard = () => {
     const selectedSet = new Set(selectedProductKeys);
     return dashboardProducts.filter((item) => selectedSet.has(item.selection_key));
   }, [dashboardProducts, selectedProductKeys]);
+
   const selectableSelectedProducts = selectedProducts;
 
   useEffect(() => {
@@ -319,6 +355,16 @@ const ParticipantDashboard = () => {
       setIsFirstDashboardVisit(false);
     }
   }, [user?.id]);
+
+  const dismissNotification = async (notifId) => {
+    const token = getStoredToken();
+    setApprovedNotifications((prev) => prev.filter((n) => n.id !== notifId));
+    try {
+      await fetchJson(`/notifications/${notifId}/read`, token, { method: "PATCH" });
+    } catch {
+      // Ignore
+    }
+  };
 
   const toggleProductSelection = (selectionKey) => {
     setSelectedProductKeys((prev) =>
@@ -351,13 +397,6 @@ const ParticipantDashboard = () => {
       const failedCount = results.length - successCount;
 
       if (successCount > 0) {
-        const succeededKeys = results
-          .map((result, index) => ({ result, key: selectableSelectedProducts[index]?.selection_key }))
-          .filter((item) => item.result.status === "fulfilled")
-          .map((item) => item.key);
-
-        setSelectedProductKeys((prev) => [...new Set([...prev, ...succeededKeys])]);
-
         const appliedRes = await fetchJson("/projects/applied", token);
         setAppliedProjects(Array.isArray(appliedRes?.data) ? appliedRes.data : []);
       }
@@ -366,10 +405,13 @@ const ParticipantDashboard = () => {
         throw new Error("Unable to submit selected products right now.");
       }
 
+      // Clear selection after submit
+      setSelectedProductKeys([]);
+
       setCatalogNotice(
         failedCount > 0
-          ? `${successCount} request(s) sent. ${failedCount} request(s) could not be submitted.`
-          : `${successCount} product request(s) sent to admin successfully.`
+          ? `${successCount} request(s) sent! We'll notify you once reviewed. ${failedCount} could not be submitted.`
+          : `🎉 Thank you! Your request for ${successCount} product(s) has been submitted. We'll notify you once the admin approves your selection.`
       );
     } catch (err) {
       setError(err.message || "Unable to submit selected products.");
@@ -452,13 +494,58 @@ const ParticipantDashboard = () => {
         </section>
 
         {error ? <div className="participant-alert">{error}</div> : null}
+
+        {approvedNotifications.map((notif) => (
+          <div
+            key={notif.id}
+            style={{
+              marginTop: "1rem",
+              background: "rgba(16, 107, 66, 0.28)",
+              border: "1px solid rgba(56, 214, 139, 0.5)",
+              color: "#c8ffe7",
+              padding: "0.85rem 1rem",
+              borderRadius: "12px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: "1rem"
+            }}
+          >
+            <div>
+              <strong style={{ display: "block", marginBottom: "0.25rem", color: "#38e2a0" }}>
+                {notif.title}
+              </strong>
+              <span style={{ fontSize: "0.93rem" }}>{notif.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => dismissNotification(notif.id)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#38e2a0",
+                fontWeight: 700,
+                fontSize: "1.1rem",
+                cursor: "pointer",
+                flexShrink: 0
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+
         <section className="participant-available" />
 
         <section className="participant-available">
           <div className="participant-section-head">
             <h2>Product Allocation</h2>
           </div>
-          {catalogNotice ? <div className="participant-notice-success" style={{ marginTop: 10 }}>{catalogNotice}</div> : null}
+          {catalogNotice ? (
+            <div className="participant-notice-success" style={{ marginTop: 10 }}>
+              {catalogNotice}
+            </div>
+          ) : null}
           <div className="participant-product-grid">
             {filteredDashboardProducts.length ? (
               filteredDashboardProducts.map((item) => {
@@ -485,7 +572,7 @@ const ParticipantDashboard = () => {
                         className="participant-proof-btn participant-mini-action"
                         onClick={() => toggleProductSelection(item.selection_key)}
                       >
-                        {isSelected ? "Selected" : "Select Product"}
+                        {isSelected ? "✓ Selected" : "Select Product"}
                       </button>
                     </div>
                   </article>
@@ -496,15 +583,12 @@ const ParticipantDashboard = () => {
             )}
           </div>
         </section>
-
-
-        
       </main>
 
       {dashboardProducts.length ? (
         <div className="participant-bottom-bar">
           <div>
-            <strong>{selectableSelectedProducts.length} new product(s) selected</strong>
+            <strong>{selectableSelectedProducts.length} product(s) selected</strong>
             <small>Review your selection and send it to admin for approval.</small>
           </div>
           <button
