@@ -16,6 +16,7 @@ const UploadProof = () => {
   const [loading, setLoading] = useState(true);
   const [allocations, setAllocations] = useState([]);
   const [fileInputKey, setFileInputKey] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
   const participantDashboardPath = id ? `/participant/${id}/dashboard` : "/dashboard";
   const participantAllocationPath = id ? `/participant/${id}/allocation/active` : "/dashboard";
   const participantPayoutPath = id ? `/participant/${id}/payouts` : "/dashboard";
@@ -44,7 +45,6 @@ const UploadProof = () => {
         setLoading(false);
       }
     };
-
     load();
   }, [routeAllocationId]);
 
@@ -62,46 +62,49 @@ const UploadProof = () => {
     if (!allocationProducts.length) return [];
     return allocationProducts.filter((product) => !product?.purchase_proof);
   }, [allocationProducts]);
+  const doneProducts = useMemo(() => {
+    if (!allocationProducts.length) return [];
+    return allocationProducts.filter((product) => Boolean(product?.purchase_proof));
+  }, [allocationProducts]);
   const selectedProduct = useMemo(() => {
     if (!allocationProducts.length) return null;
     return allocationProducts.find((product) => product.product_id === productId) || null;
   }, [allocationProducts, productId]);
   const totalProducts = allocationProducts.length;
-  const uploadedInvoiceCount = useMemo(
-    () => allocationProducts.filter((product) => Boolean(product?.purchase_proof)).length,
-    [allocationProducts]
-  );
+  const uploadedInvoiceCount = doneProducts.length;
   const remainingInvoiceCount = Math.max(0, totalProducts - uploadedInvoiceCount);
-  const nextPendingProduct = useMemo(
-    () => pendingProducts.find((product) => (product.product_id || "") !== (productId || "")) || pendingProducts[0] || null,
-    [pendingProducts, productId]
-  );
+  const progressPct = totalProducts > 0 ? Math.round((uploadedInvoiceCount / totalProducts) * 100) : 0;
 
+  // Only auto-select productId when pendingProducts list changes (e.g. after a successful upload),
+  // NOT on every productId change — so the user can freely switch products in the dropdown.
   useEffect(() => {
     if (pendingProducts.length) {
-      const nextProductId = pendingProducts.some((product) => product.product_id === productId)
-        ? productId
-        : pendingProducts[0].product_id;
-      setProductId(nextProductId || "");
+      // If current productId is still valid (still pending), keep it; otherwise pick the first pending
+      setProductId((prev) => {
+        const stillPending = pendingProducts.some((product) => product.product_id === prev);
+        return stillPending ? prev : (pendingProducts[0].product_id || "");
+      });
       return;
     }
     setProductId("");
-  }, [pendingProducts, productId]);
+  }, [pendingProducts]);
+
+  const handleFileChange = (f) => {
+    if (f) { setFile(f); setError(""); }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setMessage("");
-
     if (!allocationId || !file) {
-      setError("Please select a task and upload proof.");
+      setError("Please choose a file to upload.");
       return;
     }
     if (pendingProducts.length && !productId) {
       setError("Please select a product.");
       return;
     }
-
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -111,27 +114,19 @@ const UploadProof = () => {
         const selectedProducts = Array.isArray(row?.selected_products) ? row.selected_products : [];
         const updatedProducts = selectedProducts.map((product) => (
           String(product?.product_id || "") === String(productId || "")
-            ? {
-                ...product,
-                purchase_proof: {
-                  ...(product?.purchase_proof || {}),
-                  status: "PENDING",
-                  created_at: new Date().toISOString()
-                }
-              }
+            ? { ...product, purchase_proof: { ...(product?.purchase_proof || {}), status: "PENDING", created_at: new Date().toISOString() } }
             : product
         ));
         return { ...row, selected_products: updatedProducts };
       }));
-
       const remainingPending = pendingProducts.filter((product) => (
         String(product?.product_id || "") !== String(productId || "")
       ));
       const nextProductName = remainingPending[0]?.product_name;
       setMessage(
         remainingPending.length
-          ? `Invoice uploaded. Next: upload invoice for ${nextProductName || "the next product"}.`
-          : "All product invoices uploaded for this task. Now submit reviews."
+          ? `✅ Invoice uploaded! Next: upload invoice for "${nextProductName || "the next product"}".`
+          : "🎉 All invoices uploaded for this task! You can now submit your reviews."
       );
       setFile(null);
       setFileInputKey((prev) => prev + 1);
@@ -139,6 +134,8 @@ const UploadProof = () => {
       setError(err.response?.data?.message || "Proof upload failed.");
     }
   };
+
+  const allInvoicesDone = totalProducts > 0 && remainingInvoiceCount === 0;
 
   return (
     <div className="participant-upload-page">
@@ -152,114 +149,258 @@ const UploadProof = () => {
       </header>
 
       <main className="participant-upload-main">
-        <header className="participant-action-header">
+        {/* Page Header */}
+        <div className="upf-page-header">
           <div>
-            <h1>Upload Purchase Proof</h1>
-            <p>Select a task, upload invoice/screenshot, and submit for admin verification.</p>
+            <h1 className="upf-page-title">Submit Invoice &amp; Review</h1>
+            <p className="upf-page-subtitle">Complete all steps below for each product you purchased.</p>
           </div>
           <button type="button" className="participant-action-back" onClick={() => navigate(participantAllocationPath)}>
-            Back to My Tasks
+            ← Back to My Tasks
           </button>
-        </header>
+        </div>
 
-        <section className="participant-action-card">
-          {error ? <p className="participant-action-error">{error}</p> : null}
-          {message ? <p className="participant-action-success">{message}</p> : null}
-          {loading ? <p className="participant-action-muted">Loading tasks...</p> : null}
-          {!loading && !allocations.length ? (
-            <p className="participant-action-muted">No pending tasks found for proof upload.</p>
-          ) : null}
+        {/* How It Works */}
+        <div className="upf-how-it-works">
+          <div className="upf-step-badge">
+            <span className="upf-step-num">1</span>
+            <div>
+              <strong>Buy the product</strong>
+              <p>Purchase on Amazon using your own account</p>
+            </div>
+          </div>
+          <div className="upf-step-arrow">→</div>
+          <div className="upf-step-badge">
+            <span className="upf-step-num">2</span>
+            <div>
+              <strong>Upload invoice</strong>
+              <p>Screenshot or PDF of your order confirmation</p>
+            </div>
+          </div>
+          <div className="upf-step-arrow">→</div>
+          <div className="upf-step-badge">
+            <span className="upf-step-num">3</span>
+            <div>
+              <strong>Submit review</strong>
+              <p>Share your review link after posting on Amazon</p>
+            </div>
+          </div>
+        </div>
 
-          {!loading && allocations.length ? (
-            <form onSubmit={handleSubmit} className="participant-action-form">
-              <label htmlFor="allocationId">Task</label>
-              <select id="allocationId" value={allocationId} onChange={(e) => setAllocationId(e.target.value)}>
-                {allocations.map((row) => {
-                  const title = row?.projects?.title || row?.projects?.name || row.id;
-                  return (
-                    <option key={row.id} value={row.id}>
-                      {title}
-                    </option>
-                  );
-                })}
-              </select>
+        {error ? <div className="participant-action-error" style={{ marginBottom: "1rem" }}>{error}</div> : null}
+        {message ? <div className="participant-action-success" style={{ marginBottom: "1rem" }}>{message}</div> : null}
+        {loading ? <div className="upf-loading">Loading your tasks…</div> : null}
+        {!loading && !allocations.length ? (
+          <div className="upf-empty">
+            <div className="upf-empty-icon">📭</div>
+            <strong>No pending tasks</strong>
+            <p>You have no invoices to upload right now. Check back after your products are approved.</p>
+          </div>
+        ) : null}
 
-              {selectedAllocation ? (
-                <p className="participant-action-note">
-                  Status: {String(selectedAllocation?.status || "-").toUpperCase()}
-                  {Array.isArray(selectedAllocation?.selected_products) && selectedAllocation.selected_products.length
-                    ? ` | Product set size: ${selectedAllocation.selected_products.length}`
-                  : ""}
-                </p>
-              ) : null}
-              {totalProducts ? (
-                <div className="participant-upload-summary">
-                  <strong>{uploadedInvoiceCount}/{totalProducts}</strong> invoices uploaded.
-                  {" "}
-                  {remainingInvoiceCount > 0
-                    ? `${remainingInvoiceCount} remaining.`
-                    : "All invoices uploaded. Proceed to review upload."}
-                </div>
-              ) : null}
-
-              {pendingProducts.length ? (
-                <>
-                  <label htmlFor="productId">Product</label>
-                  <select id="productId" value={productId} onChange={(e) => setProductId(e.target.value)}>
-                    {pendingProducts.map((product) => (
-                      <option key={product.product_id || product.application_id} value={product.product_id || ""}>
-                        {product.product_name || "Product"}
-                      </option>
-                    ))}
+        {!loading && allocations.length ? (
+          <div className="upf-layout">
+            {/* LEFT — Task + Progress panel */}
+            <aside className="upf-sidebar">
+              {/* Task selector */}
+              <div className="upf-panel">
+                <div className="upf-panel-label">📋 Your Task</div>
+                {allocations.length === 1 ? (
+                  <div className="upf-task-single">
+                    {selectedAllocation?.projects?.title || selectedAllocation?.projects?.name || "Task"}
+                  </div>
+                ) : (
+                  <select
+                    className="upf-select"
+                    value={allocationId}
+                    onChange={(e) => setAllocationId(e.target.value)}
+                  >
+                    {allocations.map((row) => {
+                      const title = row?.projects?.title || row?.projects?.name || row.id;
+                      return <option key={row.id} value={row.id}>{title}</option>;
+                    })}
                   </select>
-                </>
-              ) : null}
-              {selectedProduct ? (
-                <p className="participant-action-note">
-                  Invoice: {selectedProduct?.purchase_proof ? "Uploaded" : "Pending"} | Review: {selectedProduct?.review_submission ? "Submitted" : "Pending"}
-                </p>
-              ) : null}
-              {nextPendingProduct && remainingInvoiceCount > 0 && totalProducts > 1 ? (
-                <p className="participant-action-note">
-                  Next product after this: <strong>{nextPendingProduct?.product_name || "Product"}</strong>
-                </p>
-              ) : null}
+                )}
+                {selectedAllocation ? (
+                  <span className="upf-status-chip">
+                    {String(selectedAllocation?.status || "RESERVED").toUpperCase()}
+                  </span>
+                ) : null}
+              </div>
 
-              {pendingProducts.length > 1 ? (
-                <div className="participant-upload-pending-list">
-                  <p>Pending products</p>
-                  <ul>
-                    {pendingProducts.map((product) => (
-                      <li key={product.product_id || product.application_id}>
-                        {product?.product_name || "Product"}
-                      </li>
-                    ))}
-                  </ul>
+              {/* Progress */}
+              {totalProducts > 0 ? (
+                <div className="upf-panel">
+                  <div className="upf-panel-label">📊 Invoice Progress</div>
+                  <div className="upf-progress-track">
+                    <div className="upf-progress-fill" style={{ width: `${progressPct}%` }} />
+                  </div>
+                  <div className="upf-progress-stats">
+                    <span><strong>{uploadedInvoiceCount}</strong> uploaded</span>
+                    <span><strong>{remainingInvoiceCount}</strong> remaining</span>
+                  </div>
                 </div>
               ) : null}
 
-              <label htmlFor="proofFile">Invoice/Proof File</label>
-              <input
-                key={fileInputKey}
-                id="proofFile"
-                type="file"
-                accept="image/*,.pdf"
-                onChange={(e) => setFile(e.target.files[0])}
-              />
+              {/* Product checklist */}
+              {allocationProducts.length > 0 ? (
+                <div className="upf-panel">
+                  <div className="upf-panel-label">🛒 Products in this task</div>
+                  <div className="upf-product-checklist">
+                    {allocationProducts.map((product) => {
+                      const done = Boolean(product?.purchase_proof);
+                      const isCurrent = product.product_id === productId;
+                      return (
+                        <button
+                          key={product.product_id || product.application_id}
+                          type="button"
+                          className={`upf-product-item ${done ? "upf-product-done" : isCurrent ? "upf-product-current" : "upf-product-pending"}`}
+                          onClick={() => { if (!done) setProductId(product.product_id || ""); }}
+                          disabled={done}
+                          title={done ? "Invoice already uploaded" : "Click to select this product"}
+                        >
+                          <span className="upf-product-check">{done ? "✓" : isCurrent ? "●" : "○"}</span>
+                          <span className="upf-product-name">{product.product_name || "Product"}</span>
+                          <span className={`upf-product-badge ${done ? "upf-badge-done" : "upf-badge-pending"}`}>
+                            {done ? "Done" : "Pending"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </aside>
 
-              <div className="participant-upload-actions">
-                <button type="submit">Upload Invoice / Proof</button>
-                <button
-                  type="button"
-                  className="participant-upload-secondary"
-                  onClick={() => navigate(`/participant/${id}/submit-review/${allocationId}${productId ? `?product=${encodeURIComponent(productId)}` : ""}`)}
-                >
-                  Go To Review Upload
-                </button>
-              </div>
-            </form>
-          ) : null}
-        </section>
+            {/* RIGHT — Upload form */}
+            <div className="upf-main-col">
+              {allInvoicesDone ? (
+                /* All done state */
+                <div className="upf-all-done">
+                  <div className="upf-all-done-icon">🎉</div>
+                  <h2>All invoices uploaded!</h2>
+                  <p>You've uploaded invoices for all {totalProducts} product{totalProducts > 1 ? "s" : ""}. The next step is to submit your reviews on Amazon and then upload your review links.</p>
+                  <button
+                    type="button"
+                    className="upf-btn-primary"
+                    onClick={() => navigate(`/participant/${id}/submit-review/${allocationId}`)}
+                  >
+                    Go to Review Upload →
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmit} className="upf-form">
+                  {/* Current product being uploaded */}
+                  {selectedProduct ? (
+                    <div className="upf-current-product-banner">
+                      <div className="upf-current-product-label">Uploading invoice for:</div>
+                      <div className="upf-current-product-name">{selectedProduct.product_name || "Product"}</div>
+                      {pendingProducts.length > 1 ? (
+                        <div className="upf-current-product-sub">
+                          {remainingInvoiceCount} of {totalProducts} invoices remaining
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : pendingProducts.length === 1 ? (
+                    <div className="upf-current-product-banner">
+                      <div className="upf-current-product-label">Uploading invoice for:</div>
+                      <div className="upf-current-product-name">{pendingProducts[0].product_name || "Product"}</div>
+                    </div>
+                  ) : null}
+
+                  {/* Product selector (only when multiple pending) */}
+                  {pendingProducts.length > 1 ? (
+                    <div className="upf-field">
+                      <label className="upf-label" htmlFor="productId">
+                        Select product to upload invoice for
+                      </label>
+                      <select
+                        id="productId"
+                        className="upf-select"
+                        value={productId}
+                        onChange={(e) => setProductId(e.target.value)}
+                      >
+                        {pendingProducts.map((product) => (
+                          <option key={product.product_id || product.application_id} value={product.product_id || ""}>
+                            {product.product_name || "Product"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+
+                  {/* File drop zone */}
+                  <div className="upf-field">
+                    <label className="upf-label">Upload your order invoice / screenshot</label>
+                    <div
+                      className={`upf-dropzone ${dragOver ? "upf-dropzone-active" : ""} ${file ? "upf-dropzone-filled" : ""}`}
+                      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOver(false);
+                        const dropped = e.dataTransfer.files[0];
+                        if (dropped) handleFileChange(dropped);
+                      }}
+                    >
+                      {file ? (
+                        <div className="upf-dropzone-chosen">
+                          <span className="upf-file-icon">📄</span>
+                          <div>
+                            <div className="upf-file-name">{file.name}</div>
+                            <div className="upf-file-size">{(file.size / 1024).toFixed(1)} KB</div>
+                          </div>
+                          <button
+                            type="button"
+                            className="upf-file-remove"
+                            onClick={() => { setFile(null); setFileInputKey((prev) => prev + 1); }}
+                          >✕</button>
+                        </div>
+                      ) : (
+                        <div className="upf-dropzone-empty">
+                          <div className="upf-dropzone-icon">📁</div>
+                          <div className="upf-dropzone-text">Drag &amp; drop your file here, or</div>
+                          <label className="upf-browse-btn" htmlFor={`proofFile-${fileInputKey}`}>
+                            Browse File
+                          </label>
+                          <div className="upf-dropzone-hint">Supports: JPG, PNG, PDF • Max 10 MB</div>
+                        </div>
+                      )}
+                      <input
+                        key={fileInputKey}
+                        id={`proofFile-${fileInputKey}`}
+                        type="file"
+                        accept="image/*,.pdf"
+                        style={{ display: "none" }}
+                        onChange={(e) => handleFileChange(e.target.files[0])}
+                      />
+                    </div>
+                  </div>
+
+                  {/* What to upload tip */}
+                  <div className="upf-tip">
+                    <span className="upf-tip-icon">💡</span>
+                    <span>Upload your <strong>Amazon order confirmation</strong> email screenshot or the order invoice PDF. Make sure the product name and price are clearly visible.</span>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="upf-form-actions">
+                    <button type="submit" className="upf-btn-primary" disabled={!file}>
+                      Upload Invoice
+                    </button>
+                    <button
+                      type="button"
+                      className="upf-btn-secondary"
+                      onClick={() => navigate(`/participant/${id}/submit-review/${allocationId}${productId ? `?product=${encodeURIComponent(productId)}` : ""}`)}
+                    >
+                      Go to Review Upload →
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        ) : null}
       </main>
     </div>
   );

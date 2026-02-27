@@ -16,6 +16,7 @@ import MyAllocations from "./pages/participant/MyAllocations";
 import SubmitFeedback from "./pages/participant/SubmitFeedback";
 import SubmitReview from "./pages/participant/SubmitReview";
 import UploadProof from "./pages/participant/UploadProof";
+import ProductTask from "./pages/participant/ProductTask";
 import PaymentDetails from "./pages/participant/PaymentDetails";
 import Profile from "./pages/participant/Profile";
 import UploadSection from "./pages/participant/UploadSection";
@@ -584,6 +585,14 @@ function App() {
         element={(
           <ParticipantScopedRoute>
             <SubmitReview />
+          </ParticipantScopedRoute>
+        )}
+      />
+      <Route
+        path="/participant/:id/product-task/:allocationId?"
+        element={(
+          <ParticipantScopedRoute>
+            <ProductTask />
           </ParticipantScopedRoute>
         )}
       />

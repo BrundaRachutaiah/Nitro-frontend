@@ -261,21 +261,51 @@ const ParticipantDashboard = () => {
   }, [dashboardProducts, selectedProductKeys]);
 
   const selectableSelectedProducts = selectedProducts;
-  const approvedRows = useMemo(
-    () =>
-      appliedProjects
-        .filter((item) => String(item?.status || "").toUpperCase() === "APPROVED")
-        .map((item) => ({
+  const approvedRows = useMemo(() => {
+    const approved = appliedProjects.filter(
+      (item) => String(item?.status || "").toUpperCase() === "APPROVED"
+    );
+
+    // Group by allocationId (one allocation per project) so multiple products
+    // under the same project/allocation appear as a single row with one action button.
+    const allocationMap = new Map();
+
+    for (const item of approved) {
+      const allocationId = item?.allocation?.id || null;
+      // Use allocationId as key when present; fall back to project_id so
+      // items without an allocation are still grouped correctly.
+      const groupKey = allocationId || `project::${item?.project_id || item.id}`;
+
+      if (!allocationMap.has(groupKey)) {
+        allocationMap.set(groupKey, {
           id: item.id,
           projectTitle: item?.projects?.title || item?.project_id || "-",
-          productName: item?.project_products?.name || item?.product_id || "-",
+          productNames: [],
           requestedAt: item?.reviewed_at || item?.created_at || null,
-          allocationId: item?.allocation?.id || null,
+          allocationId,
           allocationStatus: item?.allocation?.status || null
-        }))
-        .sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0)),
-    [appliedProjects]
-  );
+        });
+      }
+
+      const group = allocationMap.get(groupKey);
+      const productName = item?.project_products?.name || item?.product_id || "-";
+      if (!group.productNames.includes(productName)) {
+        group.productNames.push(productName);
+      }
+      // Keep the most recent requestedAt within the group
+      const itemDate = new Date(item?.reviewed_at || item?.created_at || 0);
+      if (itemDate > new Date(group.requestedAt || 0)) {
+        group.requestedAt = item?.reviewed_at || item?.created_at || null;
+      }
+    }
+
+    return Array.from(allocationMap.values())
+      .map((group) => ({
+        ...group,
+        productName: group.productNames.join(", ")
+      }))
+      .sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0));
+  }, [appliedProjects]);
 
   useEffect(() => {
     const userId = user?.id;
@@ -530,13 +560,19 @@ const ParticipantDashboard = () => {
                       const latestApplication = getLatestProductApplication(appliedProjects, item.id);
                       const appStatus = String(latestApplication?.status || "").toUpperCase();
                       const allocationStatus = String(latestApplication?.allocation?.status || "").toUpperCase();
-                      const canReapply = (
-                        !appStatus
-                        || appStatus === "PURCHASED"
-                        || appStatus === "COMPLETED"
-                        || appStatus === "REJECTED"
-                        || (appStatus === "APPROVED" && allocationStatus === "COMPLETED")
-                      );
+
+                      // States
+                      const isPending    = appStatus === "PENDING";
+                      const isApproved   = appStatus === "APPROVED" && allocationStatus !== "COMPLETED";
+                      const isRejected   = appStatus === "REJECTED";
+                      const isPurchased  = appStatus === "PURCHASED";
+                      const isCompleted  = appStatus === "COMPLETED" || allocationStatus === "COMPLETED";
+                      // Fresh select: never applied before
+                      const isFresh      = !appStatus;
+                      // Already bought: approved or purchased (product is in progress)
+                      const alreadyBought = isApproved || isPurchased;
+                      // Can send a new request only if fresh OR previously rejected
+                      const canSelect    = isFresh || isRejected;
 
                       return (
                         <article
@@ -565,19 +601,54 @@ const ParticipantDashboard = () => {
                             <p>Client: {item?.project_title || "Project"}</p>
                             <p>Price: {formatInr(item?.price ?? item?.product_value ?? item?.product_price)}</p>
 
-                            {appStatus === "PENDING" && (
+                            {/* PENDING: waiting for admin */}
+                            {isPending && (
                               <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.4)", color: "#fbbf24", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
-                                Request Pending - Awaiting Admin Approval
+                                ⏳ Request Pending — Awaiting Admin Approval
                               </div>
                             )}
 
-                            {appStatus === "REJECTED" && (
+                            {/* REJECTED: can re-apply */}
+                            {isRejected && (
                               <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.35)", color: "#f87171", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
-                                Admin Rejected Your Request - You can send request again
+                                ❌ Request Rejected — You can send a new request
                               </div>
                             )}
 
-                            {canReapply && (
+                            {/* APPROVED / PURCHASED: already in progress — show "Go to My Tasks" */}
+                            {alreadyBought && (
+                              <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(14,165,207,0.1)", border: "1px solid rgba(14,165,207,0.35)", color: "#7dd3fc", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
+                                ✅ You already have this product
+                              </div>
+                            )}
+                            {alreadyBought && (
+                              <button
+                                type="button"
+                                className="participant-proof-btn participant-mini-action"
+                                style={{ marginTop: 6, background: "rgba(14,165,207,0.18)", border: "1px solid rgba(14,165,207,0.45)", color: "#e0f2fe" }}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  const allocId = latestApplication?.allocation?.id;
+                                  if (allocId) {
+                                    navigate(`${participantAllocationPath}?allocation=${allocId}`);
+                                  } else {
+                                    navigate(participantAllocationPath);
+                                  }
+                                }}
+                              >
+                                Go to My Tasks →
+                              </button>
+                            )}
+
+                            {/* COMPLETED: task done, allow re-applying for another round */}
+                            {isCompleted && (
+                              <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", color: "#86efac", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
+                                ✔ Completed — Send a new request to participate again
+                              </div>
+                            )}
+
+                            {/* Fresh or Rejected: show Select / Re-request button */}
+                            {(canSelect || isCompleted) && (
                               <button
                                 type="button"
                                 className="participant-proof-btn participant-mini-action"
@@ -586,21 +657,7 @@ const ParticipantDashboard = () => {
                                   toggleProductSelection(item.selection_key);
                                 }}
                               >
-                                {isSelected ? "Selected" : appStatus ? "Request Again" : "Select Product"}
-                              </button>
-                            )}
-
-                            {appStatus === "APPROVED" && allocationStatus !== "COMPLETED" && (
-                              <button
-                                type="button"
-                                className="participant-proof-btn participant-mini-action"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  if (!latestApplication?.allocation?.id) return;
-                                  navigate(`${participantAllocationPath}?allocation=${latestApplication.allocation.id}`);
-                                }}
-                              >
-                                Selected Product
+                                {isSelected ? "✓ Selected" : isCompleted ? "Request Again" : isRejected ? "Send New Request" : "Select Product"}
                               </button>
                             )}
                           </div>

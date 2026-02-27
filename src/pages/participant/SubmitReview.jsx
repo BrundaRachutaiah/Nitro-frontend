@@ -50,8 +50,8 @@ const SubmitReview = () => {
               const proofSubmitted = isProofSubmitted(product?.purchase_proof);
               const proofApproved = isProofApproved(product?.purchase_proof);
               const hasValidReview = Boolean(product?.review_submission) && !isRejected(product?.review_submission);
-              const needsReview = (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !hasValidReview;
-              const needsFeedback = mode === "MARKETPLACE" && proofApproved && hasValidReview && !product?.feedback_submission;
+              const needsReview = proofSubmitted && !hasValidReview;
+              const needsFeedback = mode === "MARKETPLACE" && proofSubmitted && hasValidReview && !product?.feedback_submission;
               return needsReview || needsFeedback;
             });
             if (anyProductPending) return true;
@@ -60,16 +60,16 @@ const SubmitReview = () => {
             const proofSubmitted = isProofSubmitted(row?.purchase_proof);
             const proofApproved = isProofApproved(row?.purchase_proof);
             const hasValidReview = Boolean(row?.review_submission) && !isRejected(row?.review_submission);
-            const needsReview = (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !hasValidReview;
-            const needsFeedback = mode === "MARKETPLACE" && proofApproved && hasValidReview && !row?.feedback_submission;
+            const needsReview = proofSubmitted && !hasValidReview;
+            const needsFeedback = mode === "MARKETPLACE" && proofSubmitted && hasValidReview && !row?.feedback_submission;
             return needsReview || needsFeedback;
           }
 
           const proofSubmitted = isProofSubmitted(row?.purchase_proof);
           const proofApproved = isProofApproved(row?.purchase_proof);
           const hasValidReview = Boolean(row?.review_submission) && !isRejected(row?.review_submission);
-          const needsReview = (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !hasValidReview;
-          const needsFeedback = mode === "MARKETPLACE" && proofApproved && hasValidReview && !row?.feedback_submission;
+          const needsReview = proofSubmitted && !hasValidReview;
+          const needsFeedback = mode === "MARKETPLACE" && proofSubmitted && hasValidReview && !row?.feedback_submission;
           return needsReview || needsFeedback;
         });
         setAllocations(candidates);
@@ -108,8 +108,8 @@ const SubmitReview = () => {
       const proofSubmitted = isProofSubmitted(product?.purchase_proof);
       const proofApproved = isProofApproved(product?.purchase_proof);
       const hasValidReview = Boolean(product?.review_submission) && !isRejected(product?.review_submission);
-      const needsReviewForProduct = (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !hasValidReview;
-      const needsFeedbackForProduct = mode === "MARKETPLACE" && proofApproved && hasValidReview && !product?.feedback_submission;
+      const needsReviewForProduct = proofSubmitted && !hasValidReview;
+      const needsFeedbackForProduct = mode === "MARKETPLACE" && proofSubmitted && hasValidReview && !product?.feedback_submission;
       return needsReviewForProduct || needsFeedbackForProduct;
     });
     if (pending.length) return pending;

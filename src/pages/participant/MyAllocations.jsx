@@ -3,568 +3,398 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getMyAllocationTracking, updateAllocationStatus } from "../../api/allocation.api";
 import "./MyAllocations.css";
 
-const PURCHASE_MARKER_KEY_PREFIX = "nitro_purchase_confirmed_by_allocation";
+const PURCHASE_KEY_PREFIX = "nitro_purchased_";
 
-const formatCurrency = (value) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2
-  }).format(Number(value || 0));
+const fmtCurrency = (v) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(v || 0));
+
+const proofDone   = (p) => Boolean(p) && String(p?.status || "").toUpperCase() !== "REJECTED";
+const reviewDone  = (r) => Boolean(r) && String(r?.status || "").toUpperCase() !== "REJECTED";
+const statusOf    = (x) => String(x?.status || "PENDING").toUpperCase();
 
 const MyAllocations = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { id } = useParams();
-  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const queryAllocationId = query.get("allocation");
-  const showHistoryOnly = query.get("view") === "history";
-  const [data, setData] = useState([]);
-  const [activeId, setActiveId] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [purchaseSaving, setPurchaseSaving] = useState(false);
-  const [purchaseConfirmedByAllocation, setPurchaseConfirmedByAllocation] = useState({});
-  const storageKey = `${PURCHASE_MARKER_KEY_PREFIX}_${id || "unknown"}`;
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const { id }    = useParams();
+  const query     = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const queryAllocId  = query.get("allocation");
+  const showHistory   = query.get("view") === "history";
 
-  const normalizeDecisionMap = (value) => {
-    if (!value || typeof value !== "object") return {};
-    const next = {};
-    Object.entries(value).forEach(([allocationId, decision]) => {
-      if (decision === true || decision === "true") next[allocationId] = true;
-      if (decision === false || decision === "false") next[allocationId] = false;
-    });
-    return next;
-  };
+  const [data,       setData]       = useState([]);
+  const [activeId,   setActiveId]   = useState("");
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState("");
+  const [saving,     setSaving]     = useState(false);
+  const [purchased,  setPurchased]  = useState({});
 
+  const storageKey = `${PURCHASE_KEY_PREFIX}${id || "x"}`;
+
+  // Load purchased state from localStorage
   useEffect(() => {
     try {
       const raw = localStorage.getItem(storageKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      const normalized = normalizeDecisionMap(parsed);
-      if (Object.keys(normalized).length > 0) {
-        setPurchaseConfirmedByAllocation(normalized);
-      }
-    } catch {
-      setPurchaseConfirmedByAllocation({});
-    }
+      if (raw) setPurchased(JSON.parse(raw) || {});
+    } catch { setPurchased({}); }
   }, [storageKey]);
 
+  // Save purchased state to localStorage
   useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(purchaseConfirmedByAllocation));
-    } catch {
-      // Ignore storage write errors; in-memory state still updates UI.
-    }
-  }, [purchaseConfirmedByAllocation, storageKey]);
+    try { localStorage.setItem(storageKey, JSON.stringify(purchased)); } catch { /* ignore */ }
+  }, [purchased, storageKey]);
 
+  // Load allocations
   useEffect(() => {
-    const loadAllocations = async () => {
+    (async () => {
+      setLoading(true);
       try {
-        const res = await getMyAllocationTracking();
+        const res  = await getMyAllocationTracking();
         const rows = Array.isArray(res.data?.data) ? res.data.data : [];
         setData(rows);
-        if (rows.length > 0) {
-          const matching = queryAllocationId
-            ? rows.find((item) => item.id === queryAllocationId)
-            : null;
-          setActiveId(matching?.id || rows[0].id);
+        if (rows.length) {
+          const match  = queryAllocId && rows.find((r) => r.id === queryAllocId);
+          const active = rows.find((r) => ["RESERVED","PURCHASED"].includes(String(r?.status||"").toUpperCase()));
+          setActiveId(match?.id || active?.id || rows[0].id);
         }
       } catch (err) {
         setError(err.response?.data?.message || "Failed to load tasks.");
-      } finally {
-        setLoading(false);
-      }
-    };
+      } finally { setLoading(false); }
+    })();
+  }, [queryAllocId]);
 
-    loadAllocations();
-  }, [queryAllocationId]);
+  const ACTIVE = ["RESERVED","PURCHASED"];
+  const currentData = useMemo(() => data.filter((r) => ACTIVE.includes(String(r?.status||"").toUpperCase())), [data]);
+  const historyData = useMemo(() => data.filter((r) => !ACTIVE.includes(String(r?.status||"").toUpperCase())), [data]);
+  const viewData    = showHistory ? historyData : currentData;
 
-  const active = useMemo(() => {
-    return data.find((item) => item.id === activeId) || data[0] || null;
-  }, [activeId, data]);
-  const singleAllocationMode = Boolean(queryAllocationId) && !showHistoryOnly;
+  const active = useMemo(() =>
+    viewData.find((r) => r.id === activeId) ||
+    data.find((r)    => r.id === activeId) ||
+    viewData[0] || data[0] || null
+  , [activeId, viewData, data]);
 
-  const project = active?.projects || {};
-  const selectedProducts = Array.isArray(active?.selected_products) ? active.selected_products : [];
-  const productValueFromSet = selectedProducts.reduce((sum, item) => sum + Number(item?.product_value || 0), 0);
-  const selectedProductValue = Number(active?.selected_product?.product_value || 0);
-  const productValue = productValueFromSet > 0
-    ? productValueFromSet
-    : selectedProductValue > 0
-      ? selectedProductValue
-      : Number(project?.product_value || 0);
-  const totalPayout = productValue;
-  const projectName = project?.title || project?.name || "Campaign Product";
-  const requiresFeedback = String(project?.mode || "").toUpperCase() === "MARKETPLACE";
-  const status = String(active?.status || "RESERVED").toUpperCase();
-  const isCompleted = status === "COMPLETED";
-  const isPurchased = status === "PURCHASED";
-  const activeReviewStatus = String(active?.review_submission?.status || "").toUpperCase();
-  const hasValidReviewSubmission = Boolean(active?.review_submission) && activeReviewStatus !== "REJECTED";
-  const hasPurchaseProof = Boolean(active?.purchase_proof)
-    || selectedProducts.some((item) => Boolean(item?.purchase_proof) && String(item?.purchase_proof?.status || "").toUpperCase() !== "REJECTED");
-  const hasFeedbackSubmission = Boolean(active?.feedback_submission);
-  const requiredFlowCompleted = requiresFeedback
-    ? hasPurchaseProof && hasValidReviewSubmission && hasFeedbackSubmission
-    : hasPurchaseProof;
-  const isReviewStepDone = hasValidReviewSubmission || hasFeedbackSubmission;
-  const isReviewStepActive = !isReviewStepDone && (hasPurchaseProof || isCompleted);
-  const purchaseDecision = active?.id ? purchaseConfirmedByAllocation[active.id] : undefined;
-  const isPurchaseConfirmed = Boolean(
-    purchaseDecision === true || isPurchased || hasPurchaseProof || isCompleted
-  );
-  const stopCountdown = isCompleted || requiredFlowCompleted;
-  const daysLeft = useMemo(() => {
-    if (stopCountdown || !active?.reserved_until) return 0;
-    const diff = new Date(active.reserved_until).getTime() - Date.now();
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-  }, [active, stopCountdown]);
+  const products      = useMemo(() => Array.isArray(active?.selected_products) ? active.selected_products : [], [active]);
+  const status        = String(active?.status || "RESERVED").toUpperCase();
+  const isCompleted   = status === "COMPLETED";
+  const isPurchased   = status === "PURCHASED";
+  const isPurchaseConfirmed = Boolean(purchased[active?.id] || isPurchased || isCompleted ||
+    products.some((p) => proofDone(p.purchase_proof)));
+
+  const project       = active?.projects || {};
+  const projectName   = project.title || project.name || "Campaign";
+  const totalValue    = products.reduce((s, p) => s + Number(p?.product_value || 0), 0);
+  const requiresFeedback = String(project.mode || "").toUpperCase() === "MARKETPLACE";
+  const allInvDone    = products.length > 0 && products.every((p) => proofDone(p.purchase_proof));
+  const allRevDone    = products.length > 0 && products.every((p) => reviewDone(p.review_submission));
 
   const timeLeft = useMemo(() => {
-    if (stopCountdown || !active?.reserved_until) return { days: 0, hours: 0, mins: 0, secs: 0 };
+    if (isCompleted || !active?.reserved_until) return { d:0, h:0, m:0, s:0 };
     let diff = Math.max(0, new Date(active.reserved_until).getTime() - Date.now());
-    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
-    diff -= days * 24 * 60 * 60 * 1000;
-    const hours = Math.floor(diff / (60 * 60 * 1000));
-    diff -= hours * 60 * 60 * 1000;
-    const mins = Math.floor(diff / (60 * 1000));
-    diff -= mins * 60 * 1000;
-    const secs = Math.floor(diff / 1000);
-    return { days, hours, mins, secs };
-  }, [active, stopCountdown]);
-  const participantDashboardPath = id ? `/participant/${id}/dashboard` : "/dashboard";
-  const participantPayoutPath = id ? `/participant/${id}/payouts` : "/dashboard";
-  const participantTasksPath = id ? `/participant/${id}/allocation/active` : "/dashboard";
-  const participantHistoryPath = id ? `/participant/${id}/allocation/active?view=history` : "/dashboard";
+    const d = Math.floor(diff / 864e5); diff -= d * 864e5;
+    const h = Math.floor(diff / 36e5);  diff -= h * 36e5;
+    const m = Math.floor(diff / 6e4);   diff -= m * 6e4;
+    const s = Math.floor(diff / 1e3);
+    return { d, h, m, s };
+  }, [active, isCompleted]);
 
-  const getDisplayStatus = (item) => {
-    const rawStatus = String(item?.status || "RESERVED").toUpperCase();
-    if (rawStatus === "RESERVED" && purchaseConfirmedByAllocation[item?.id] === true) {
-      return "PURCHASED";
-    }
-    return rawStatus;
+  // Navigation paths
+  const P = {
+    dash:    id ? `/participant/${id}/dashboard`                          : "/dashboard",
+    tasks:   id ? `/participant/${id}/allocation/active`                  : "/dashboard",
+    history: id ? `/participant/${id}/allocation/active?view=history`     : "/dashboard",
+    payouts: id ? `/participant/${id}/payouts`                            : "/dashboard",
+    task:    (aId, pId) => `/participant/${id}/product-task/${aId}${pId ? `?product=${encodeURIComponent(pId)}` : ""}`,
   };
 
-  const markPurchaseDecision = async (value) => {
-    if (!active?.id) return;
-    setError("");
-
-    // Persist user's choice first so UI reflects the action immediately.
-    setPurchaseConfirmedByAllocation((prev) => ({
-      ...prev,
-      [active.id]: value
-    }));
-
-    if (value === true && !isPurchased && !isCompleted) {
-      try {
-        setPurchaseSaving(true);
-        await updateAllocationStatus(active.id, "PURCHASED");
-        setData((prev) =>
-          prev.map((row) => (row.id === active.id ? { ...row, status: "PURCHASED" } : row))
-        );
-      } catch (err) {
-        setError(
-          `${err.response?.data?.message || "Unable to update allocation status."} Showing PURCHASED in UI from your selection.`
-        );
-        setPurchaseSaving(false);
-      } finally {
-        setPurchaseSaving(false);
-      }
-    }
+  const confirmPurchase = async () => {
+    if (!active?.id || saving) return;
+    setPurchased((prev) => ({ ...prev, [active.id]: true }));
+    setSaving(true);
+    try {
+      await updateAllocationStatus(active.id, "PURCHASED");
+      setData((prev) => prev.map((r) => r.id === active.id ? { ...r, status: "PURCHASED" } : r));
+    } catch (err) {
+      setError(err.response?.data?.message || "Could not update status — marked purchased locally.");
+    } finally { setSaving(false); }
   };
 
-  const getProofLabel = (item) => {
-    const proof = item?.purchase_proof;
-    if (!proof) return "Invoice not uploaded";
-    const statusLabel = String(proof?.status || "PENDING").toUpperCase();
-    if (statusLabel === "PENDING") return "Successfully uploaded, waiting for review";
-    if (statusLabel === "APPROVED") return "Proof approved";
-    if (statusLabel === "REJECTED") return "Proof rejected, please re-upload";
-    return statusLabel;
-  };
-
-  const getReviewLabel = (item) => {
-    const review = item?.review_submission;
-    const feedback = item?.feedback_submission;
-    if (review) {
-      const reviewStatus = String(review?.status || "PENDING").toUpperCase();
-      if (reviewStatus === "PENDING") return "Review uploaded successfully, admin approval required";
-      if (reviewStatus === "APPROVED") return "Review approved";
-      if (reviewStatus === "REJECTED") return "Review rejected, please update and resubmit";
-      return `Review ${reviewStatus}`;
-    }
-    if (feedback) return `Feedback submitted (${Number(feedback?.rating || 0)}/5)`;
-    return "Review not submitted";
-  };
-
-  const getPayoutLabel = (item) => {
-    const payout = item?.payout;
-    if (!payout) return "Not eligible yet";
-    return `${String(payout?.status || "ELIGIBLE").toUpperCase()} - ${formatCurrency(payout?.amount)}`;
-  };
-
-  const submissionHistory = useMemo(() => {
-    const history = [];
-
-    data.forEach((item) => {
-      const projectName = item?.projects?.title || item?.projects?.name || "Untitled";
-      const allocationId = item?.id || "";
-
-      if (item?.purchase_proof?.created_at) {
-        history.push({
-          key: `proof-${item.purchase_proof.id || allocationId}`,
-          allocationId,
-          at: item.purchase_proof.created_at,
-          projectName,
-          activity: "Invoice Uploaded",
-          details: item?.purchase_proof?.file_url ? "Purchase proof submitted" : "Purchase proof submitted",
-          status: String(item?.purchase_proof?.status || "PENDING").toUpperCase()
-        });
-      }
-
-      if (item?.review_submission?.created_at) {
-        history.push({
-          key: `review-${item.review_submission.id || allocationId}`,
-          allocationId,
-          at: item.review_submission.created_at,
-          projectName,
-          activity: "Review Submitted",
-          details: item?.review_submission?.review_url ? "Review text/screenshot submitted" : "Review submitted",
-          status: String(item?.review_submission?.status || "PENDING").toUpperCase()
-        });
-      }
-
-      if (item?.feedback_submission?.created_at) {
-        history.push({
-          key: `feedback-${item.feedback_submission.id || allocationId}`,
-          allocationId,
-          at: item.feedback_submission.created_at,
-          projectName,
-          activity: "Feedback Submitted",
-          details: `Rating ${Number(item?.feedback_submission?.rating || 0)}/5`,
-          status: "SUBMITTED"
-        });
-      }
+  // Submission history for current allocation
+  const history = useMemo(() => {
+    const rows = [];
+    (active?.selected_products || [null]).forEach((p, i) => {
+      const proof    = p?.purchase_proof    || (p === null ? active?.purchase_proof    : null);
+      const review   = p?.review_submission || (p === null ? active?.review_submission : null);
+      const feedback = p?.feedback_submission || (p === null ? active?.feedback_submission : null);
+      const pname    = p?.product_name ? ` · ${p.product_name}` : "";
+      if (proof?.created_at)    rows.push({ key:`proof-${i}`,    at: proof.created_at,    label: `Invoice Uploaded${pname}`,    status: statusOf(proof) });
+      if (review?.created_at)   rows.push({ key:`review-${i}`,   at: review.created_at,   label: `Review Submitted${pname}`,   status: statusOf(review) });
+      if (feedback?.created_at) rows.push({ key:`feedback-${i}`, at: feedback.created_at, label: `Feedback Submitted${pname}`, status: "SUBMITTED" });
     });
+    return rows.sort((a, b) => new Date(b.at) - new Date(a.at));
+  }, [active]);
 
-    return history
-      .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0));
-  }, [data]);
-  const scopedTrackingData = useMemo(() => {
-    if (singleAllocationMode && active?.id) return data.filter((item) => item.id === active.id);
-    return data;
-  }, [singleAllocationMode, active?.id, data]);
-
-  const scopedSubmissionHistory = useMemo(() => {
-    if (singleAllocationMode && active?.id) {
-      return submissionHistory.filter((row) => row.allocationId === active.id);
-    }
-    return submissionHistory;
-  }, [singleAllocationMode, active?.id, submissionHistory]);
+  // Status chip color
+  const chipColor = (s) => ({
+    APPROVED: "#22c55e", PENDING: "#f59e0b", REJECTED: "#ef4444",
+    SUBMITTED: "#3b82f6", COMPLETED: "#10b981", PURCHASED: "#06b6d4",
+    RESERVED: "#06b6d4", EXPIRED: "#f97316"
+  }[s] || "#94a3b8");
 
   return (
-    <div className="allocation-page">
-      <header className="allocation-topbar">
-        <div className="allocation-brand">Nitro</div>
-        <nav>
-          <button type="button" onClick={() => navigate(participantDashboardPath)}>Dashboard</button>
-          <button type="button" className={showHistoryOnly ? "" : "active"} onClick={() => navigate(participantTasksPath)}>My Tasks</button>
-          <button type="button" className={showHistoryOnly ? "active" : ""} onClick={() => navigate(participantHistoryPath)}>History</button>
-          <button type="button" onClick={() => navigate(participantPayoutPath)}>Payouts</button>
+    <div className="ma-page">
+      {/* ── TOPBAR ── */}
+      <header className="ma-topbar">
+        <div className="ma-brand" onClick={() => navigate(P.dash)} role="button" tabIndex={0} onKeyDown={(e) => e.key==="Enter" && navigate(P.dash)}>Nitro</div>
+        <nav className="ma-nav">
+          <button type="button" onClick={() => navigate(P.dash)}>Dashboard</button>
+          <button type="button" className={!showHistory ? "active" : ""} onClick={() => navigate(P.tasks)}>My Tasks</button>
+          <button type="button" className={showHistory ? "active" : ""} onClick={() => navigate(P.history)}>History</button>
+          <button type="button" onClick={() => navigate(P.payouts)}>Payouts</button>
         </nav>
       </header>
 
-      <main className="allocation-main-shell">
-        <section className="allocation-main-head">
-          <h1>My Tasks</h1>
-          <p>Complete each step in order to finish your program.</p>
-        </section>
-
-        {loading ? <p className="allocation-loading">Loading tasks...</p> : null}
-        {error ? <p className="allocation-error">{error}</p> : null}
-
-        {!loading && !data.length ? (
-          <div className="allocation-empty">
-            <p>No active tasks available.</p>
-            <button type="button" onClick={() => navigate(participantDashboardPath)}>Back to Dashboard</button>
+      <main className="ma-main">
+        {/* Page header */}
+        <div className="ma-page-head">
+          <div>
+            <h1>{showHistory ? "Task History" : "My Tasks"}</h1>
+            <p>{showHistory ? "Completed and past campaigns." : "Complete each step to earn your reimbursement."}</p>
           </div>
-        ) : (
-          <>
-            {!singleAllocationMode ? (
-              <section className="allocation-switcher">
-                {data.map((item) => {
-                  const name = item?.projects?.title || item?.projects?.name || "Untitled";
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={active?.id === item.id ? "active" : ""}
-                      onClick={() => setActiveId(item.id)}
-                    >
-                      <strong>{name}</strong>
-                      <span>{getDisplayStatus(item)}</span>
-                    </button>
-                  );
-                })}
-              </section>
-            ) : null}
+        </div>
 
-            {!showHistoryOnly ? (
-              <section className="allocation-countdown">
-                <div><strong>{String(timeLeft.days).padStart(2, "0")}</strong><span>DAYS</span></div>
-                <div><strong>{String(timeLeft.hours).padStart(2, "0")}</strong><span>HOURS</span></div>
-                <div><strong>{String(timeLeft.mins).padStart(2, "0")}</strong><span>MINS</span></div>
-                <div><strong>{String(timeLeft.secs).padStart(2, "0")}</strong><span>SECS</span></div>
-              </section>
-            ) : null}
+        {loading && <div className="ma-loading"><div className="ma-spinner" /><span>Loading your tasks…</span></div>}
+        {error   && <div className="ma-error">{error}</div>}
 
-            {!showHistoryOnly ? (
-            <section className="allocation-upload-card">
-              <h2>Current Task</h2>
-              {selectedProducts.length ? (
-                <div className="allocation-product-set">
-                  <p className="allocation-product-set-title">Approved Product Set ({selectedProducts.length})</p>
-                  <ul>
-                    {selectedProducts.map((item) => (
-                      <li key={item.application_id || item.product_id || `${item.product_name}-${item.product_value}`}>
-                        <span>{item.product_name || "Product"}</span>
-                        <strong>{formatCurrency(item.product_value || 0)}</strong>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {!isPurchaseConfirmed ? (
-                <>
-                  <p>Confirm that you purchased this approved product set in <strong>{projectName}</strong> to unlock the next steps.</p>
-                  <div className="allocation-actions">
-                    <button
-                      type="button"
-                      className="primary"
-                      onClick={() => markPurchaseDecision(true)}
-                      disabled={hasPurchaseProof || isCompleted || purchaseSaving}
-                    >
-                      {purchaseSaving ? "Saving..." : "I Purchased This Product"}
-                    </button>
-                  </div>
-                </>
-              ) : !hasPurchaseProof ? (
-                <>
-                  <p>Upload invoice proof for this allocation set in <strong>{projectName}</strong>.</p>
-                  <div className="allocation-actions">
-                    <button type="button" className="primary" onClick={() => navigate(`/participant/${id}/upload-proof/${active?.id || ""}`)}>
-                      Upload Invoice
-                    </button>
-                  </div>
-                </>
-              ) : !hasValidReviewSubmission ? (
-                <>
-                  <p>Submit review for this allocation set.</p>
-                  <div className="allocation-actions">
-                    <button type="button" className="primary" onClick={() => navigate(`/participant/${id}/submit-review/${active?.id || ""}`)}>
-                      Submit Review
-                    </button>
-                  </div>
-                </>
-              ) : requiresFeedback && !hasFeedbackSubmission ? (
-                <>
-                  <p>Submit your final feedback to complete this task.</p>
-                  <div className="allocation-actions">
-                    <button type="button" className="primary" onClick={() => navigate(`/participant/${id}/submit-review/${active?.id || ""}`)}>
-                      Submit Feedback
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <p>All required tasks are complete. You can check payout status on the Payouts page.</p>
-              )}
-            </section>
-            ) : null}
+        {!loading && !data.length && (
+          <div className="ma-empty">
+            <div className="ma-empty-icon">📭</div>
+            <strong>No tasks yet</strong>
+            <p>Head to the Dashboard to browse campaigns.</p>
+            <button type="button" onClick={() => navigate(P.dash)}>Go to Dashboard</button>
+          </div>
+        )}
 
-            {!showHistoryOnly ? (
-            <section className="allocation-journey">
-              <div className="journey-step done">
-                <h3><span className="journey-icon">✅</span> Reservation Confirmed</h3>
-                <p>Completed</p>
-              </div>
-              <div className={`journey-step ${isPurchaseConfirmed ? "done" : "active"}`}>
-                <h3>Purchase Product</h3>
-                <p>{isPurchaseConfirmed ? "Completed" : "Pending action"}</p>
-              </div>
-              <div className={`journey-step ${hasPurchaseProof || isCompleted ? "done" : isPurchaseConfirmed ? "active" : ""}`}>
-                <h3>Upload Invoice</h3>
-                <p>
-                  {hasPurchaseProof || isCompleted
-                    ? "Completed"
-                    : isPurchaseConfirmed
-                      ? `Due in ${daysLeft} days`
-                      : "Complete purchase confirmation first"}
-                </p>
-              </div>
-              <div className={`journey-step ${isReviewStepDone ? "done" : isReviewStepActive ? "active" : "locked"}`}>
-                <h3>Submit Review</h3>
-                <p>
-                  {isReviewStepDone
-                    ? "Completed"
-                    : "Submit review after purchase proof approval"}
-                </p>
-              </div>
-            </section>
-            ) : null}
+        {!loading && data.length > 0 && !viewData.length && (
+          <div className="ma-empty">
+            <div className="ma-empty-icon">{showHistory ? "📂" : "✅"}</div>
+            <strong>{showHistory ? "No history yet" : "No active tasks"}</strong>
+            <p>{showHistory ? "Completed tasks will appear here." : "All done! Check your payout status."}</p>
+            <button type="button" onClick={() => navigate(showHistory ? P.tasks : P.payouts)}>
+              {showHistory ? "Go to My Tasks" : "View Payouts"}
+            </button>
+          </div>
+        )}
 
-            <section className="allocation-track-list">
-              <h2>Task Tracking</h2>
-              <div className="allocation-track-table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Project</th>
-                      <th>Status</th>
-                      <th>Purchase Proof</th>
-                      <th>Review / Feedback</th>
-                      <th>Payout</th>
-                      <th>Reserved Until</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scopedTrackingData.map((item) => {
-                      const itemProject = item?.projects || {};
-                      const name = itemProject?.title || itemProject?.name || "Untitled";
-                      const mode = String(itemProject?.mode || "").toUpperCase();
-                      const itemStatus = getDisplayStatus(item);
-                      const reservedUntil = item?.reserved_until
-                        ? new Date(item.reserved_until).toLocaleString()
-                        : "-";
-
+        {!loading && viewData.length > 0 && (
+          <div className="ma-layout">
+            {/* ── LEFT SIDEBAR ── */}
+            <aside className="ma-sidebar">
+              {/* Campaign switcher */}
+              <div className="ma-panel">
+                <div className="ma-panel-label">📋 Campaign</div>
+                {viewData.length > 1 ? (
+                  <div className="ma-switcher">
+                    {viewData.map((r) => {
+                      const name = r?.projects?.title || r?.projects?.name || "Untitled";
+                      const s    = String(r?.status||"").toUpperCase();
                       return (
-                        <tr key={`track-${item.id}`}>
-                          <td>{name}</td>
-                          <td>
-                            <span className={`status-chip status-${itemStatus.toLowerCase()}`}>
-                              {itemStatus}
-                            </span>
-                          </td>
-                          <td>
-                            <div className="allocation-inline-cell">
-                              <span>{getProofLabel(item)}</span>
-                              {item?.purchase_proof?.file_url ? (
-                                <a
-                                  href={item.purchase_proof.file_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  View Proof
-                                </a>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td>
-                            <div className="allocation-inline-cell">
-                              <span>{getReviewLabel(item)}</span>
-                              {item?.review_submission?.review_url ? (
-                                <a
-                                  href={item.review_submission.review_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  View Review
-                                </a>
-                              ) : null}
-                              {(!item?.review_submission || String(item?.review_submission?.status || "").toUpperCase() === "REJECTED") ? (
-                                <button
-                                  type="button"
-                                  className="secondary"
-                                  onClick={() => navigate(`/participant/${id}/submit-review/${item.id}`)}
-                                >
-                                  Submit Review
-                                </button>
-                              ) : null}
-                              {mode === "MARKETPLACE"
-                              && Boolean(item?.review_submission)
-                              && String(item?.review_submission?.status || "").toUpperCase() !== "REJECTED"
-                              && !item?.feedback_submission ? (
-                                <button
-                                  type="button"
-                                  className="secondary"
-                                  onClick={() => navigate(`/participant/${id}/submit-review/${item.id}`)}
-                                >
-                                  Submit Feedback
-                                </button>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td>{getPayoutLabel(item)}</td>
-                          <td>{reservedUntil}</td>
-                        </tr>
+                        <button key={r.id} type="button" className={`ma-switch-btn ${r.id === active?.id ? "active" : ""}`} onClick={() => setActiveId(r.id)}>
+                          <span className="ma-switch-name">{name}</span>
+                          <span className="ma-switch-chip" style={{ color: chipColor(s) }}>{s}</span>
+                        </button>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+                ) : (
+                  <>
+                    <div className="ma-campaign-name">{projectName}</div>
+                    <span className="ma-status-chip" style={{ background: `${chipColor(status)}22`, color: chipColor(status), border: `1px solid ${chipColor(status)}55` }}>{status}</span>
+                  </>
+                )}
               </div>
-            </section>
 
-            <section className="allocation-track-list allocation-history-list">
-              <h2>Submission History</h2>
-              <p className="allocation-history-note">
-                {singleAllocationMode
-                  ? "Track invoice uploads and review submissions for this allocation."
-                  : "Track invoice uploads and review submissions for all your allocations."}
-              </p>
-              <div className="allocation-track-table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date & Time</th>
-                      <th>Project</th>
-                      <th>Activity</th>
-                      <th>Details</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scopedSubmissionHistory.length ? (
-                      scopedSubmissionHistory.map((row) => (
-                        <tr key={row.key}>
-                          <td>{row.at ? new Date(row.at).toLocaleString() : "-"}</td>
-                          <td>{row.projectName}</td>
-                          <td>{row.activity}</td>
-                          <td>{row.details}</td>
-                          <td>{row.status}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={5}>No submission history yet.</td>
-                      </tr>
+              {/* Timer */}
+              {!showHistory && !isCompleted && (
+                <div className="ma-panel">
+                  <div className="ma-panel-label">⏰ Time Remaining</div>
+                  <div className="ma-timer">
+                    {[["d","DAYS"],["h","HRS"],["m","MIN"],["s","SEC"]].map(([k,label]) => (
+                      <div key={k} className="ma-timer-cell">
+                        <strong>{String(timeLeft[k]).padStart(2,"0")}</strong>
+                        <span>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Estimated payout */}
+              {!showHistory && (
+                <div className="ma-panel">
+                  <div className="ma-panel-label">💰 Estimated Payout</div>
+                  <div className="ma-payout-amt">{fmtCurrency(totalValue)}</div>
+                  <div className="ma-payout-note">Reimbursement after approval</div>
+                </div>
+              )}
+
+              {/* Steps overview */}
+              {!showHistory && (
+                <div className="ma-panel">
+                  <div className="ma-panel-label">📌 Steps Overview</div>
+                  <div className="ma-steps-list">
+                    {[
+                      ["Reservation Confirmed",  true],
+                      ["Purchase Products",       isPurchaseConfirmed],
+                      ["Upload Invoices",         allInvDone],
+                      ["Submit Reviews",          allRevDone],
+                    ].map(([label, done]) => (
+                      <div key={label} className={`ma-step-item ${done ? "done" : ""}`}>
+                        <span className="ma-step-dot">{done ? "✓" : "○"}</span>
+                        <span>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </aside>
+
+            {/* ── MAIN CONTENT ── */}
+            <div className="ma-content">
+
+              {/* STEP 1: Purchase Confirmation */}
+              {!showHistory && !isPurchaseConfirmed && (
+                <div className="ma-card ma-card-active">
+                  <div className="ma-card-step-num">Step 1</div>
+                  <h2 className="ma-card-title">Confirm Your Purchase</h2>
+                  <p className="ma-card-sub">Buy all approved products on Amazon using your own account, then confirm below to unlock the next steps.</p>
+
+                  {products.length > 0 && (
+                    <div className="ma-product-list">
+                      <div className="ma-product-list-label">Products to buy ({products.length})</div>
+                      {products.map((p, i) => (
+                        <div key={p.product_id || i} className="ma-product-row">
+                          <div className="ma-product-row-name">{p.product_name || "Product"}</div>
+                          <div className="ma-product-row-price">{fmtCurrency(p.product_value)}</div>
+                        </div>
+                      ))}
+                      <div className="ma-product-total">
+                        <span>Total to spend</span>
+                        <strong>{fmtCurrency(totalValue)}</strong>
+                      </div>
+                    </div>
+                  )}
+
+                  <button type="button" className="ma-btn-primary" onClick={confirmPurchase} disabled={saving}>
+                    {saving ? "Saving…" : "✓ I've Purchased All Products"}
+                  </button>
+                </div>
+              )}
+
+              {/* STEP 2+3: Per-product invoice & review */}
+              {!showHistory && isPurchaseConfirmed && (
+                <div className="ma-card">
+                  <div className="ma-card-step-num">Steps 2 &amp; 3</div>
+                  <h2 className="ma-card-title">Upload Invoice &amp; Review — Per Product</h2>
+                  <p className="ma-card-sub">Each product needs its own invoice upload and review submission. Complete both for every product.</p>
+
+                  <div className="ma-per-product-grid">
+                    {products.length > 0 ? products.map((prod, i) => {
+                      const inv   = prod?.purchase_proof;
+                      const rev   = prod?.review_submission;
+                      const iDone = proofDone(inv);
+                      const rDone = reviewDone(rev);
+                      const pId   = prod?.product_id || "";
+
+                      return (
+                        <div key={pId || i} className={`ma-prod-card ${iDone && rDone ? "ma-prod-done" : ""}`}>
+                          <div className="ma-prod-num">{i + 1}</div>
+                          <div className="ma-prod-body">
+                            <div className="ma-prod-name">{prod.product_name || "Product"}</div>
+                            <div className="ma-prod-price">{fmtCurrency(prod.product_value)}</div>
+
+                            <div className="ma-prod-steps">
+                              {/* Invoice step */}
+                              <div className={`ma-prod-step ${iDone ? "done" : "todo"}`}>
+                                <div className="ma-prod-step-icon">{iDone ? "✅" : "📄"}</div>
+                                <div className="ma-prod-step-info">
+                                  <div className="ma-prod-step-label">Invoice Upload</div>
+                                  <div className="ma-prod-step-status">
+                                    {iDone
+                                      ? (statusOf(inv) === "APPROVED" ? "Approved ✓" : "⏳ Under Review")
+                                      : "Not Uploaded"}
+                                  </div>
+                                </div>
+                                {!iDone && (
+                                  <button type="button" className="ma-prod-btn" onClick={() => navigate(P.task(active.id, pId))}>
+                                    Upload Invoice →
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Review step */}
+                              <div className={`ma-prod-step ${rDone ? "done" : iDone ? "todo" : "locked"}`}>
+                                <div className="ma-prod-step-icon">{rDone ? "✅" : iDone ? "⭐" : "🔒"}</div>
+                                <div className="ma-prod-step-info">
+                                  <div className="ma-prod-step-label">Review Submission</div>
+                                  <div className="ma-prod-step-status">
+                                    {rDone
+                                      ? (statusOf(rev) === "APPROVED" ? "Approved ✓" : "⏳ Under Review")
+                                      : iDone ? "Ready to submit" : "Upload Invoice First"}
+                                  </div>
+                                </div>
+                                {iDone && !rDone && (
+                                  <button type="button" className="ma-prod-btn" onClick={() => navigate(P.task(active.id, pId))}>
+                                    Submit Review →
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }) : (
+                      /* No products — single allocation fallback */
+                      <div className="ma-prod-card">
+                        <div className="ma-prod-body" style={{ paddingLeft: 0 }}>
+                          <div className="ma-prod-name">{projectName}</div>
+                          <button type="button" className="ma-btn-primary" onClick={() => navigate(P.task(active.id, ""))}>
+                            Upload Invoice &amp; Review →
+                          </button>
+                        </div>
+                      </div>
                     )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+                  </div>
 
-            <section className="allocation-detail-cards">
-              <article>
-                <h3>Guidelines</h3>
-                <ul>
-                  <li>Minimum 150 words review</li>
-                  <li>Include product photos if required</li>
-                  <li>Submit before reservation expires</li>
-                </ul>
-              </article>
-              <article>
-                <h3>Payout</h3>
-                <p className="amount">{formatCurrency(totalPayout)}</p>
-                <small>Estimated product reimbursement amount</small>
-              </article>
-              <article>
-                <h3>Need Help?</h3>
-                <p>Contact support if you face issues with purchase or proof upload.</p>
-                <button type="button" onClick={() => navigate(participantTasksPath)}>Refresh Tasks</button>
-              </article>
-            </section>
-          </>
+                  {allInvDone && allRevDone && (
+                    <div className="ma-all-done-banner">
+                      🎉 All invoices and reviews submitted! Check your <button type="button" className="ma-link-btn" onClick={() => navigate(P.payouts)}>Payout status →</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Submission History */}
+              <div className="ma-card">
+                <h2 className="ma-card-title">📋 Submission History</h2>
+                {history.length === 0 ? (
+                  <p className="ma-empty-note">No submissions yet for this task.</p>
+                ) : (
+                  <div className="ma-history-list">
+                    {history.map((row) => (
+                      <div key={row.key} className="ma-history-row">
+                        <div className="ma-history-dot" style={{ background: chipColor(row.status) }} />
+                        <div className="ma-history-info">
+                          <div className="ma-history-label">{row.label}</div>
+                          <div className="ma-history-time">{new Date(row.at).toLocaleString("en-IN", { dateStyle:"medium", timeStyle:"short" })}</div>
+                        </div>
+                        <span className="ma-history-status" style={{ color: chipColor(row.status) }}>{row.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </div>
         )}
       </main>
     </div>
