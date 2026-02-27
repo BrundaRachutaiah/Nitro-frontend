@@ -6,8 +6,8 @@ export const getAllocations = () =>
 export const getMyAllocations = () =>
   axios.get("/allocations/my");
 
-export const getMyAllocationTracking = () =>
-  axios.get("/allocations/my/tracking");
+export const getMyAllocationTracking = (config = {}) =>
+  axios.get("/allocations/my/tracking", config);
 
 export const applyForProject = (projectId, payload) =>
   axios.post(`/projects/${projectId}/apply`, payload);

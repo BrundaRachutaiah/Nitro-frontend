@@ -6,9 +6,12 @@ export const submitFeedback = (data) =>
 export const submitReview = (data) =>
   axios.post("/review", data);
 
-export const uploadReviewProof = (allocationId, formData) => {
+export const uploadReviewProof = (allocationId, formData, productId = "") => {
   if (!formData.has("allocationId")) {
     formData.append("allocationId", allocationId);
+  }
+  if (productId && !formData.has("productId")) {
+    formData.append("productId", productId);
   }
 
   return axios.post("/uploads/review-proof", formData, {
@@ -18,9 +21,12 @@ export const uploadReviewProof = (allocationId, formData) => {
   });
 };
 
-export const uploadReviewProofs = (allocationId, formData) => {
+export const uploadReviewProofs = (allocationId, formData, productId = "") => {
   if (!formData.has("allocationId")) {
     formData.append("allocationId", allocationId);
+  }
+  if (productId && !formData.has("productId")) {
+    formData.append("productId", productId);
   }
 
   return axios.post("/uploads/review-proofs", formData, {

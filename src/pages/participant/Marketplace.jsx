@@ -305,8 +305,14 @@ const Marketplace = () => {
         };
       }
 
-      await applyForProject(selectedProject.id, payload);
-      setNotice("Request submitted successfully. Our admin team will review your request and update you by email soon.");
+      const applyRes = await applyForProject(selectedProject.id, payload);
+      const alreadyPending = Boolean(applyRes?.data?.alreadyPending);
+      setNotice(
+        applyRes?.data?.message
+        || (alreadyPending
+          ? "You already requested this product. It is waiting for admin approval."
+          : "Request submitted successfully. Our admin team will review your request and update you by email soon.")
+      );
       setApplyProduct(null);
       if (includeDetails) {
         setHasPaymentDetails(true);
@@ -346,17 +352,8 @@ const Marketplace = () => {
     });
 
   const displayProducts = useMemo(
-    () =>
-      products.filter((product) => {
-        const match = myApplications.find((item) => {
-          const appProjectId = item?.project_id || item?.projects?.id;
-          const appProductId = item?.product_id || item?.project_products?.id;
-          return appProjectId === selectedProject?.id && appProductId === product?.id;
-        });
-        const status = String(match?.status || "").toUpperCase();
-        return status !== "PURCHASED";
-      }),
-    [products, myApplications, selectedProject?.id]
+    () => products,
+    [products]
   );
 
   return (
@@ -523,8 +520,16 @@ const Marketplace = () => {
                         {(() => {
                           const match = findApplication(product);
                           const status = String(match?.status || "").toUpperCase();
+                          const allocationStatus = String(match?.allocation?.status || "").toUpperCase();
+                          const canRequestAgain = (
+                            !match
+                            || status === "COMPLETED"
+                            || status === "PURCHASED"
+                            || status === "REJECTED"
+                            || (status === "APPROVED" && allocationStatus === "COMPLETED")
+                          );
 
-                          if (!match || status === "COMPLETED") {
+                          if (canRequestAgain) {
                             return (
                               <button
                                 type="button"
@@ -545,8 +550,8 @@ const Marketplace = () => {
                                   : !isSelectedProjectActive
                                     ? "Project Closed"
                                     : hasPaymentDetails
-                                      ? (status === "COMPLETED" ? "Request Again" : "Send Request")
-                                      : (status === "COMPLETED" ? "Request Again" : "Send Request")}
+                                      ? (match ? "Request Again" : "Send Request")
+                                      : (match ? "Request Again" : "Send Request")}
                               </button>
                             );
                           }

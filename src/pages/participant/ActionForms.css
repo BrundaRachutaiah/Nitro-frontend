@@ -59,6 +59,8 @@
   padding: 10px 12px;
   color: #0d2a45;
   background: #fff;
+  width: 100%;
+  min-width: 0;
 }
 
 .participant-action-form input,

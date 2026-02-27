@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getMyAllocationTracking } from "../../api/allocation.api";
 import { submitFeedback, submitReview, uploadReviewProofs } from "../../api/participant.api";
 import "./ActionForms.css";
@@ -7,8 +7,10 @@ import "./SubmitReview.css";
 
 const SubmitReview = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id, allocationId: routeAllocationId } = useParams();
   const [allocationId, setAllocationId] = useState("");
+  const [productId, setProductId] = useState("");
   const [reviewText, setReviewText] = useState("");
   const [reviewUrl, setReviewUrl] = useState("");
   const [reviewFiles, setReviewFiles] = useState([]);
@@ -19,23 +21,55 @@ const SubmitReview = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [allocations, setAllocations] = useState([]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const routeProductId = useMemo(() => new URLSearchParams(location.search).get("product") || "", [location.search]);
   const participantDashboardPath = id ? `/participant/${id}/dashboard` : "/dashboard";
   const participantTasksPath = id ? `/participant/${id}/allocation/active` : "/dashboard";
   const participantPayoutPath = id ? `/participant/${id}/payouts` : "/dashboard";
+  const isRejected = (submission) => String(submission?.status || "").toUpperCase() === "REJECTED";
+  const getProofStatus = (proof) => String(proof?.status || "").toUpperCase();
+  const isProofSubmitted = (proof) => {
+    if (!proof) return false;
+    const status = getProofStatus(proof);
+    if (!status) return true;
+    return status !== "REJECTED";
+  };
+  const isProofApproved = (proof) => getProofStatus(proof) === "APPROVED";
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await getMyAllocationTracking();
+        const res = await getMyAllocationTracking({ timeout: 15000 });
         const rows = Array.isArray(res.data?.data) ? res.data.data : [];
         const candidates = rows.filter((row) => {
           const mode = String(row?.projects?.mode || "").toUpperCase();
-          const proofStatus = String(row?.purchase_proof?.status || "").toUpperCase();
-          const proofSubmitted = proofStatus === "PENDING" || proofStatus === "APPROVED";
-          const proofApproved = proofStatus === "APPROVED";
-          const needsReview = (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !row?.review_submission;
-          const needsFeedback = mode === "MARKETPLACE" && proofApproved && Boolean(row?.review_submission) && !row?.feedback_submission;
+          const products = Array.isArray(row?.selected_products) ? row.selected_products : [];
+          if (products.length) {
+            const anyProductPending = products.some((product) => {
+              const proofSubmitted = isProofSubmitted(product?.purchase_proof);
+              const proofApproved = isProofApproved(product?.purchase_proof);
+              const hasValidReview = Boolean(product?.review_submission) && !isRejected(product?.review_submission);
+              const needsReview = (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !hasValidReview;
+              const needsFeedback = mode === "MARKETPLACE" && proofApproved && hasValidReview && !product?.feedback_submission;
+              return needsReview || needsFeedback;
+            });
+            if (anyProductPending) return true;
+
+            // Compatibility fallback for old allocation-level proof/review data.
+            const proofSubmitted = isProofSubmitted(row?.purchase_proof);
+            const proofApproved = isProofApproved(row?.purchase_proof);
+            const hasValidReview = Boolean(row?.review_submission) && !isRejected(row?.review_submission);
+            const needsReview = (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !hasValidReview;
+            const needsFeedback = mode === "MARKETPLACE" && proofApproved && hasValidReview && !row?.feedback_submission;
+            return needsReview || needsFeedback;
+          }
+
+          const proofSubmitted = isProofSubmitted(row?.purchase_proof);
+          const proofApproved = isProofApproved(row?.purchase_proof);
+          const hasValidReview = Boolean(row?.review_submission) && !isRejected(row?.review_submission);
+          const needsReview = (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !hasValidReview;
+          const needsFeedback = mode === "MARKETPLACE" && proofApproved && hasValidReview && !row?.feedback_submission;
           return needsReview || needsFeedback;
         });
         setAllocations(candidates);
@@ -46,23 +80,81 @@ const SubmitReview = () => {
           setAllocationId(fromRoute);
         }
       } catch (err) {
-        setError(err.response?.data?.message || "Unable to load tasks.");
+        const timeout = err?.code === "ECONNABORTED";
+        setError(
+          timeout
+            ? "Loading timed out. Please retry."
+            : (err.response?.data?.message || "Unable to load tasks.")
+        );
       } finally {
         setLoading(false);
       }
     };
 
     load();
-  }, [routeAllocationId]);
+  }, [routeAllocationId, reloadKey]);
 
   const selectedAllocation = useMemo(
     () => allocations.find((row) => row.id === allocationId) || null,
     [allocations, allocationId]
   );
+  const pendingProducts = useMemo(() => {
+    const mode = String(selectedAllocation?.projects?.mode || "").toUpperCase();
+    const products = Array.isArray(selectedAllocation?.selected_products)
+      ? selectedAllocation.selected_products
+      : [];
+    if (!products.length) return [];
+    const pending = products.filter((product) => {
+      const proofSubmitted = isProofSubmitted(product?.purchase_proof);
+      const proofApproved = isProofApproved(product?.purchase_proof);
+      const hasValidReview = Boolean(product?.review_submission) && !isRejected(product?.review_submission);
+      const needsReviewForProduct = (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !hasValidReview;
+      const needsFeedbackForProduct = mode === "MARKETPLACE" && proofApproved && hasValidReview && !product?.feedback_submission;
+      return needsReviewForProduct || needsFeedbackForProduct;
+    });
+    if (pending.length) return pending;
+
+    // Compatibility fallback when proof/review is still at allocation-level.
+    if (products.length === 1) {
+      const proofSubmitted = isProofSubmitted(selectedAllocation?.purchase_proof);
+      const proofApproved = isProofApproved(selectedAllocation?.purchase_proof);
+      const hasValidReview = Boolean(selectedAllocation?.review_submission) && !isRejected(selectedAllocation?.review_submission);
+      const needsReview = (mode === "MARKETPLACE" || mode === "D2C") && proofSubmitted && !hasValidReview;
+      const needsFeedback = mode === "MARKETPLACE" && proofApproved && hasValidReview && !selectedAllocation?.feedback_submission;
+      if (needsReview || needsFeedback) return products;
+    }
+    return [];
+  }, [selectedAllocation]);
+
+  useEffect(() => {
+    if (!pendingProducts.length) {
+      setProductId("");
+      return;
+    }
+    const preferred = routeProductId && pendingProducts.some((product) => product.product_id === routeProductId)
+      ? routeProductId
+      : productId;
+    const next = pendingProducts.some((product) => product.product_id === preferred)
+      ? preferred
+      : pendingProducts[0].product_id;
+    setProductId(next || "");
+  }, [pendingProducts, productId, routeProductId]);
+
+  const selectedProduct = useMemo(() => {
+    if (!pendingProducts.length) return null;
+    return pendingProducts.find((product) => product.product_id === productId) || pendingProducts[0] || null;
+  }, [pendingProducts, productId]);
 
   const selectedMode = String(selectedAllocation?.projects?.mode || "").toUpperCase();
-  const needsReview = Boolean(selectedAllocation) && !selectedAllocation?.review_submission;
-  const needsFeedback = selectedMode === "MARKETPLACE" && Boolean(selectedAllocation?.review_submission) && !selectedAllocation?.feedback_submission;
+  const fallbackHasValidReview = Boolean(selectedAllocation?.review_submission) && !isRejected(selectedAllocation?.review_submission);
+  const fallbackNeedsReview = Boolean(selectedAllocation) && !fallbackHasValidReview;
+  const fallbackNeedsFeedback = selectedMode === "MARKETPLACE" && fallbackHasValidReview && !selectedAllocation?.feedback_submission;
+  const needsReview = selectedProduct
+    ? !(Boolean(selectedProduct?.review_submission) && !isRejected(selectedProduct?.review_submission))
+    : fallbackNeedsReview;
+  const needsFeedback = selectedProduct
+    ? selectedMode === "MARKETPLACE" && Boolean(selectedProduct?.review_submission) && !isRejected(selectedProduct?.review_submission) && !selectedProduct?.feedback_submission
+    : fallbackNeedsFeedback;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -71,6 +163,10 @@ const SubmitReview = () => {
 
     if (!allocationId) {
       setError("Please select a task.");
+      return;
+    }
+    if (pendingProducts.length && !productId) {
+      setError("Please select a product.");
       return;
     }
 
@@ -104,7 +200,7 @@ const SubmitReview = () => {
           reviewFiles.forEach((file) => {
             formData.append("files", file);
           });
-          const uploadRes = await uploadReviewProofs(allocationId, formData);
+          const uploadRes = await uploadReviewProofs(allocationId, formData, productId);
           uploadedUrls = Array.isArray(uploadRes?.data?.data?.review_urls)
             ? uploadRes.data.data.review_urls
             : [];
@@ -130,6 +226,7 @@ const SubmitReview = () => {
 
         await submitReview({
           allocationId,
+          productId: productId || undefined,
           reviewText: finalReviewText,
           reviewUrl: finalReviewUrl
         });
@@ -143,6 +240,7 @@ const SubmitReview = () => {
 
         await submitFeedback({
           allocationId,
+          productId: productId || undefined,
           rating: Number(rating),
           feedbackText: feedbackText.trim()
         });
@@ -184,6 +282,11 @@ const SubmitReview = () => {
 
         <section className="participant-action-card">
           {error ? <p className="participant-action-error">{error}</p> : null}
+          {error ? (
+            <button type="button" onClick={() => setReloadKey((prev) => prev + 1)} className="participant-action-back">
+              Retry Loading
+            </button>
+          ) : null}
           {message ? <p className="participant-action-success">{message}</p> : null}
           {loading ? <p className="participant-action-muted">Loading allocations...</p> : null}
           {!loading && !allocations.length ? (
@@ -207,7 +310,22 @@ const SubmitReview = () => {
               {selectedAllocation ? (
                 <p className="participant-action-note">
                   Task: {needsReview ? "Submit Review" : needsFeedback ? "Submit Feedback" : "Completed"}
+                  {Array.isArray(selectedAllocation?.selected_products) && selectedAllocation.selected_products.length
+                    ? ` | Product set size: ${selectedAllocation.selected_products.length}`
+                    : ""}
                 </p>
+              ) : null}
+              {pendingProducts.length ? (
+                <>
+                  <label htmlFor="productId">Product</label>
+                  <select id="productId" value={productId} onChange={(e) => setProductId(e.target.value)}>
+                    {pendingProducts.map((product) => (
+                      <option key={product.product_id || product.application_id} value={product.product_id || ""}>
+                        {product.product_name || "Product"}
+                      </option>
+                    ))}
+                  </select>
+                </>
               ) : null}
               {needsReview ? (
                 <>

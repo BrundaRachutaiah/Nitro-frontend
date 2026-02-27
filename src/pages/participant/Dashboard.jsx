@@ -61,6 +61,13 @@ const formatInr = (value) => {
   }).format(amount);
 };
 
+const openProductLink = (url) => {
+  const raw = String(url || "").trim();
+  if (!raw) return;
+  const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  window.open(normalized, "_blank", "noopener,noreferrer");
+};
+
 const ParticipantDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -74,6 +81,7 @@ const ParticipantDashboard = () => {
   const [selectedProductKeys, setSelectedProductKeys] = useState([]);
   const [sendingProductRequest, setSendingProductRequest] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [clientFilter, setClientFilter] = useState("ALL");
   const [topNav, setTopNav] = useState("dashboard");
   const [allocationView, setAllocationView] = useState("allocation");
   const [catalogNotice, setCatalogNotice] = useState("");
@@ -200,15 +208,26 @@ const ParticipantDashboard = () => {
   const participantProfilePath = user?.id ? `/participant/${user.id}/profile` : "/dashboard";
 
   const filteredDashboardProducts = useMemo(() => {
-    if (!searchTerm.trim()) return dashboardProducts;
     const term = searchTerm.toLowerCase();
     return dashboardProducts.filter((item) => {
+      const clientName = String(item?.project_title || "").trim();
       const title = String(item?.project_title || "").toLowerCase();
       const productName = String(item?.name || "").toLowerCase();
       const category = String(item?.category || "").toLowerCase();
-      return title.includes(term) || productName.includes(term) || category.includes(term);
+      const matchesSearch = !term || title.includes(term) || productName.includes(term) || category.includes(term);
+      const matchesClient = clientFilter === "ALL" || clientName === clientFilter;
+      return matchesSearch && matchesClient;
     });
-  }, [dashboardProducts, searchTerm]);
+  }, [dashboardProducts, searchTerm, clientFilter]);
+
+  const clientFilterOptions = useMemo(() => {
+    const unique = new Set(
+      dashboardProducts
+        .map((item) => String(item?.project_title || "").trim())
+        .filter(Boolean)
+    );
+    return Array.from(unique).sort((a, b) => a.localeCompare(b));
+  }, [dashboardProducts]);
 
   const unlockedProjects = useMemo(
     () => catalogProjects.filter((item) => String(item?.access_status || "").toUpperCase() === "APPROVED"),
@@ -485,67 +504,113 @@ const ParticipantDashboard = () => {
               {catalogNotice ? (
                 <div className="participant-notice-success" style={{ marginTop: 10 }}>{catalogNotice}</div>
               ) : null}
-              <div className="participant-product-grid">
-                {filteredDashboardProducts.length ? (
-                  filteredDashboardProducts.map((item) => {
-                    const isSelected = selectedProductKeys.includes(item.selection_key);
-                    const latestApplication = getLatestProductApplication(appliedProjects, item.id);
-                    const appStatus = String(latestApplication?.status || "").toUpperCase();
-                    const canSelect = !appStatus || appStatus === "PURCHASED" || appStatus === "COMPLETED";
+              <div className="participant-catalog-layout">
+                <aside className="participant-filter-sidebar">
+                  <h3>Filters</h3>
+                  <label htmlFor="participant-client-filter">Client / Brand</label>
+                  <select
+                    id="participant-client-filter"
+                    value={clientFilter}
+                    onChange={(event) => setClientFilter(event.target.value)}
+                  >
+                    <option value="ALL">All Clients</option>
+                    {clientFilterOptions.map((clientName) => (
+                      <option key={clientName} value={clientName}>
+                        {clientName}
+                      </option>
+                    ))}
+                  </select>
+                  <small>{filteredDashboardProducts.length} product(s)</small>
+                </aside>
 
-                    return (
-                      <article key={item.selection_key} className={`participant-product-card ${isSelected ? "is-selected" : ""}`}>
-                        <div className="participant-product-image">
-                          <img
-                            src={getPreviewImage(item?.image_url || item?.product_url, `${item.selection_key}-allocation`)}
-                            alt={item?.name || "Product"}
-                            loading="lazy"
-                          />
-                        </div>
-                        <div className="participant-product-body">
-                          <span className="participant-product-tag">{item?.project_category || "General"}</span>
-                          <h3>{item?.name || "Product"}</h3>
-                          <p>Client: {item?.project_title || "Project"}</p>
-                          <p>Price: {formatInr(item?.price ?? item?.product_value ?? item?.product_price)}</p>
+                <div className="participant-product-grid">
+                  {filteredDashboardProducts.length ? (
+                    filteredDashboardProducts.map((item) => {
+                      const isSelected = selectedProductKeys.includes(item.selection_key);
+                      const latestApplication = getLatestProductApplication(appliedProjects, item.id);
+                      const appStatus = String(latestApplication?.status || "").toUpperCase();
+                      const allocationStatus = String(latestApplication?.allocation?.status || "").toUpperCase();
+                      const canReapply = (
+                        !appStatus
+                        || appStatus === "PURCHASED"
+                        || appStatus === "COMPLETED"
+                        || appStatus === "REJECTED"
+                        || (appStatus === "APPROVED" && allocationStatus === "COMPLETED")
+                      );
 
-                          {appStatus === "PENDING" && (
-                            <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.4)", color: "#fbbf24", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
-                              Request Pending - Awaiting Admin Approval
-                            </div>
-                          )}
+                      return (
+                        <article
+                          key={item.selection_key}
+                          className={`participant-product-card participant-product-card-clickable ${isSelected ? "is-selected" : ""}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openProductLink(item?.product_url)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              openProductLink(item?.product_url);
+                            }
+                          }}
+                        >
+                          <div className="participant-product-image">
+                            <img
+                              src={getPreviewImage(item?.image_url || item?.product_url, `${item.selection_key}-allocation`)}
+                              alt={item?.name || "Product"}
+                              loading="lazy"
+                            />
+                          </div>
+                          <div className="participant-product-body">
+                            <span className="participant-product-tag">{item?.project_category || "General"}</span>
+                            <h3>{item?.name || "Product"}</h3>
+                            <p>Client: {item?.project_title || "Project"}</p>
+                            <p>Price: {formatInr(item?.price ?? item?.product_value ?? item?.product_price)}</p>
 
-                          {appStatus === "REJECTED" && (
-                            <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.35)", color: "#f87171", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
-                              Admin Rejected Your Request
-                            </div>
-                          )}
+                            {appStatus === "PENDING" && (
+                              <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.4)", color: "#fbbf24", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
+                                Request Pending - Awaiting Admin Approval
+                              </div>
+                            )}
 
-                          {canSelect && (
-                            <button type="button" className="participant-proof-btn participant-mini-action" onClick={() => toggleProductSelection(item.selection_key)}>
-                              {isSelected ? "Selected" : "Select Product"}
-                            </button>
-                          )}
+                            {appStatus === "REJECTED" && (
+                              <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.35)", color: "#f87171", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
+                                Admin Rejected Your Request - You can send request again
+                              </div>
+                            )}
 
-                          {appStatus === "APPROVED" && (
-                            <button
-                              type="button"
-                              className="participant-proof-btn participant-mini-action"
-                              disabled={!latestApplication?.allocation?.id}
-                              onClick={() => {
-                                if (!latestApplication?.allocation?.id) return;
-                                navigate(`${participantAllocationPath}?allocation=${latestApplication.allocation.id}`);
-                              }}
-                            >
-                              {latestApplication?.allocation?.id ? "Open Allocation" : "Allocation Pending"}
-                            </button>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })
-                ) : (
-                  <div className="participant-empty-card">No products available for this search right now.</div>
-                )}
+                            {canReapply && (
+                              <button
+                                type="button"
+                                className="participant-proof-btn participant-mini-action"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  toggleProductSelection(item.selection_key);
+                                }}
+                              >
+                                {isSelected ? "Selected" : appStatus ? "Request Again" : "Select Product"}
+                              </button>
+                            )}
+
+                            {appStatus === "APPROVED" && allocationStatus !== "COMPLETED" && (
+                              <button
+                                type="button"
+                                className="participant-proof-btn participant-mini-action"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  if (!latestApplication?.allocation?.id) return;
+                                  navigate(`${participantAllocationPath}?allocation=${latestApplication.allocation.id}`);
+                                }}
+                              >
+                                Selected Product
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })
+                  ) : (
+                    <div className="participant-empty-card">No products available for this search right now.</div>
+                  )}
+                </div>
               </div>
             </>
           )}

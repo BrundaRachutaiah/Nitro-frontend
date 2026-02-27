@@ -40,14 +40,14 @@
 }
 
 .allocation-main-shell {
-  max-width: 1100px;
+  max-width: 980px;
   margin: 0 auto;
-  padding: 1.3rem;
+  padding: 1rem;
 }
 
 .allocation-main-head h1 {
   margin: 0;
-  font-size: clamp(2.1rem, 3.4vw, 3.2rem);
+  font-size: clamp(1.8rem, 2.8vw, 2.6rem);
 }
 
 .allocation-main-head p {
@@ -84,8 +84,8 @@
 .allocation-switcher {
   margin-top: 1rem;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.6rem;
 }
 
 .allocation-switcher button {
@@ -125,7 +125,7 @@
 
 .allocation-countdown strong {
   display: block;
-  font-size: 2rem;
+  font-size: 1.8rem;
   line-height: 1;
   color: #24d2f2;
 }
@@ -231,12 +231,44 @@
 
 .allocation-upload-card h2 {
   margin: 0;
-  font-size: 1.8rem;
+  font-size: 1.55rem;
 }
 
 .allocation-upload-card p {
   margin: 0.55rem 0 0;
   color: #9cb6c2;
+}
+
+.allocation-product-set {
+  margin-top: 0.75rem;
+  border: 1px solid rgba(71, 171, 202, 0.28);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: rgba(10, 46, 61, 0.48);
+}
+
+.allocation-product-set-title {
+  margin: 0;
+  font-weight: 700;
+  color: #cae8f5;
+  font-size: 0.9rem;
+}
+
+.allocation-product-set ul {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.allocation-product-set li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.86rem;
+  color: #a8c5d3;
 }
 
 .allocation-actions {
@@ -248,7 +280,7 @@
 .allocation-actions button {
   border: 1px solid rgba(141, 176, 203, 0.35);
   border-radius: 10px;
-  height: 44px;
+  height: 40px;
   padding: 0 0.95rem;
   font-weight: 700;
 }
@@ -308,14 +340,15 @@
 .allocation-track-list table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 980px;
+  min-width: 860px;
 }
 
 .allocation-track-list th,
 .allocation-track-list td {
-  padding: 0.65rem;
+  padding: 0.55rem;
   border-bottom: 1px solid rgba(141, 176, 203, 0.15);
   text-align: left;
+  font-size: 0.9rem;
 }
 
 .allocation-track-list th {

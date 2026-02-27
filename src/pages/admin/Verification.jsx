@@ -4,6 +4,7 @@ import ProofReview from "../../components/verification/ProofPreview";
 import ApproveRejectionButton from "../../components/verification/ApproveRejectButtons";
 import axios from "../../api/axiosInstance";
 import "../superAdmin/AdminPages.css";
+import "./Verification.css";
 
 const VALID_UPLOAD_TYPES = new Set(["ALL", "INVOICE", "REVIEW"]);
 const VALID_STATUSES = new Set(["ALL", "PENDING", "APPROVED", "REJECTED"]);
@@ -27,7 +28,9 @@ const Verifications = () => {
   const [reviews, setReviews] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [uploadTypeFilter, setUploadTypeFilter] = useState(initialFilters.uploadType);
+  const [activeTab, setActiveTab] = useState(
+    initialFilters.uploadType === "REVIEW" ? "REVIEW" : "INVOICE"
+  );
   const [statusFilter, setStatusFilter] = useState(initialFilters.status);
   const [projectFilter, setProjectFilter] = useState("ALL");
   const [productFilter, setProductFilter] = useState("ALL");
@@ -37,9 +40,6 @@ const Verifications = () => {
     setError("");
     setLoading(true);
     try {
-      const shouldFetchProofs = uploadTypeFilter !== "REVIEW";
-      const shouldFetchReviews = uploadTypeFilter !== "INVOICE";
-
       const proofPath = statusFilter === "PENDING"
         ? "/admin/purchase-proofs/pending"
         : statusFilter === "ALL"
@@ -53,8 +53,8 @@ const Verifications = () => {
           : `/admin/reviews?status=${statusFilter}&limit=200`;
 
       const [proofRes, reviewRes] = await Promise.all([
-        shouldFetchProofs ? axios.get(proofPath) : Promise.resolve({ data: { data: [] } }),
-        shouldFetchReviews ? axios.get(reviewPath) : Promise.resolve({ data: { data: [] } })
+        axios.get(proofPath),
+        axios.get(reviewPath)
       ]);
 
       setProofs(Array.isArray(proofRes.data?.data) ? proofRes.data.data : []);
@@ -64,7 +64,7 @@ const Verifications = () => {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, uploadTypeFilter]);
+  }, [statusFilter]);
 
   useEffect(() => {
     load();
@@ -72,7 +72,7 @@ const Verifications = () => {
 
   useEffect(() => {
     const next = readQueryFilters(location.search);
-    setUploadTypeFilter(next.uploadType);
+    setActiveTab(next.uploadType === "REVIEW" ? "REVIEW" : "INVOICE");
     setStatusFilter(next.status);
   }, [location.search]);
 
@@ -90,16 +90,12 @@ const Verifications = () => {
     }
   };
 
-  const showInvoiceTable = uploadTypeFilter === "ALL" || uploadTypeFilter === "INVOICE";
-  const showReviewTable = uploadTypeFilter === "ALL" || uploadTypeFilter === "REVIEW";
   const showActionsColumn = statusFilter === "PENDING";
 
   const rowsForFilters = useMemo(() => {
-    const rows = [];
-    if (showInvoiceTable) rows.push(...proofs);
-    if (showReviewTable) rows.push(...reviews);
-    return rows;
-  }, [showInvoiceTable, showReviewTable, proofs, reviews]);
+    if (activeTab === "INVOICE") return proofs;
+    return reviews;
+  }, [activeTab, proofs, reviews]);
 
   const projectOptions = useMemo(() => {
     const map = new Map();
@@ -146,35 +142,84 @@ const Verifications = () => {
     [reviews, projectFilter, productFilter]
   );
 
-  const pageTitle = useMemo(() => {
-    if (uploadTypeFilter === "INVOICE") return "Invoice Upload Verifications";
-    if (uploadTypeFilter === "REVIEW") return "Review Upload Verifications";
-    return "Verifications";
-  }, [uploadTypeFilter]);
+  const pageTitle = "Verifications";
+  const invoiceCount = proofs.length;
+  const reviewCount = reviews.length;
+  const currentRows = activeTab === "INVOICE" ? filteredProofs : filteredReviews;
+  const quickStats = useMemo(() => {
+    const initial = { total: 0, pending: 0, approved: 0, rejected: 0 };
+    return currentRows.reduce((acc, row) => {
+      acc.total += 1;
+      const status = String(row?.status || "").toUpperCase();
+      if (status === "PENDING") acc.pending += 1;
+      if (status === "APPROVED") acc.approved += 1;
+      if (status === "REJECTED") acc.rejected += 1;
+      return acc;
+    }, initial);
+  }, [currentRows]);
 
   return (
-    <div className="admin-page">
-      <div className="admin-page-head">
+    <div className="admin-page verification-page">
+      <div className="admin-page-head verification-head">
         <div>
           <h1>{pageTitle}</h1>
           <p>Review and approve participant uploads</p>
         </div>
         <div className="admin-head-actions">
-          <button type="button" className="admin-btn" onClick={() => navigate("/admin/applications")}>Back</button>
-          <button type="button" className="admin-btn" onClick={load}>Refresh</button>
+          <button type="button" className="admin-btn verification-head-btn" onClick={() => navigate("/admin/applications")}>Back</button>
+          <button type="button" className="admin-btn verification-head-btn primary" onClick={load}>Refresh</button>
         </div>
       </div>
 
       {error ? <p className="admin-error">{error}</p> : null}
 
-      <section className="admin-panel mb-3">
-        <h3 className="mb-2">Upload Filters</h3>
-        <div className="admin-actions" style={{ gap: 10 }}>
-          <label htmlFor="upload-status-filter">Status</label>
+      <section className="admin-panel verification-toolbar mb-3">
+        <div className="verification-tabs" role="tablist" aria-label="Verification type">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "INVOICE"}
+            className={`verification-tab ${activeTab === "INVOICE" ? "active" : ""}`}
+            onClick={() => setActiveTab("INVOICE")}
+          >
+            Invoice Uploads
+            <span>{invoiceCount}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "REVIEW"}
+            className={`verification-tab ${activeTab === "REVIEW" ? "active" : ""}`}
+            onClick={() => setActiveTab("REVIEW")}
+          >
+            Review Uploads
+            <span>{reviewCount}</span>
+          </button>
+        </div>
+        <div className="verification-meta">
+          <article>
+            <p>Total</p>
+            <strong>{quickStats.total}</strong>
+          </article>
+          <article>
+            <p>Pending</p>
+            <strong>{quickStats.pending}</strong>
+          </article>
+          <article>
+            <p>Approved</p>
+            <strong>{quickStats.approved}</strong>
+          </article>
+          <article>
+            <p>Rejected</p>
+            <strong>{quickStats.rejected}</strong>
+          </article>
+        </div>
+        <h3 className="mb-2">Filters</h3>
+        <div className="verification-filter-row">
+          <label htmlFor="upload-status-filter" className="verification-filter-label">Status</label>
           <select
             id="upload-status-filter"
-            className="form-select"
-            style={{ maxWidth: 220 }}
+            className="form-select verification-filter-select"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -184,11 +229,10 @@ const Verifications = () => {
             <option value="ALL">All</option>
           </select>
 
-          <label htmlFor="project-filter">Project</label>
+          <label htmlFor="project-filter" className="verification-filter-label">Project</label>
           <select
             id="project-filter"
-            className="form-select"
-            style={{ maxWidth: 280 }}
+            className="form-select verification-filter-select"
             value={projectFilter}
             onChange={(e) => setProjectFilter(e.target.value)}
           >
@@ -200,11 +244,10 @@ const Verifications = () => {
             ))}
           </select>
 
-          <label htmlFor="product-filter">Product</label>
+          <label htmlFor="product-filter" className="verification-filter-label">Product</label>
           <select
             id="product-filter"
-            className="form-select"
-            style={{ maxWidth: 280 }}
+            className="form-select verification-filter-select"
             value={productFilter}
             onChange={(e) => setProductFilter(e.target.value)}
           >
@@ -218,9 +261,9 @@ const Verifications = () => {
         </div>
       </section>
 
-      {showInvoiceTable ? (
-        <section className="admin-panel admin-table-wrap">
-          <h3 className="mb-3">Invoice Uploads</h3>
+      {activeTab === "INVOICE" ? (
+        <section className="admin-panel admin-table-wrap verification-table-panel">
+          <h3 className="mb-3 verification-section-title">Invoice Uploads</h3>
           <table className="admin-table">
             <thead>
               <tr>
@@ -241,7 +284,9 @@ const Verifications = () => {
                 filteredProofs.map((p) => (
                   <tr key={p.id}>
                     <td>{p.project_name || "-"}</td>
-                    <td>{p.product_name || "-"}</td>
+                    <td className="verification-product-cell" title={p.product_name || "-"}>
+                      {p.product_name || "-"}
+                    </td>
                     <td>{p.participant_name || "-"}</td>
                     <td>{p.participant_email || "-"}</td>
                     <td><ProofReview proofUrl={p.file_url} /></td>
@@ -264,9 +309,9 @@ const Verifications = () => {
         </section>
       ) : null}
 
-      {showReviewTable ? (
-        <section className="admin-panel admin-table-wrap mt-3">
-          <h3 className="mb-3">Review Uploads</h3>
+      {activeTab === "REVIEW" ? (
+        <section className="admin-panel admin-table-wrap verification-table-panel">
+          <h3 className="mb-3 verification-section-title">Review Uploads</h3>
           <table className="admin-table">
             <thead>
               <tr>
@@ -288,7 +333,9 @@ const Verifications = () => {
                 filteredReviews.map((review) => (
                   <tr key={review.id}>
                     <td>{review.project_name || "-"}</td>
-                    <td>{review.product_name || "-"}</td>
+                    <td className="verification-product-cell" title={review.product_name || "-"}>
+                      {review.product_name || "-"}
+                    </td>
                     <td>{review.participant_name || "-"}</td>
                     <td>{review.participant_email || "-"}</td>
                     <td>
@@ -296,7 +343,9 @@ const Verifications = () => {
                         <a href={review.review_url} target="_blank" rel="noreferrer">View Upload</a>
                       ) : "-"}
                     </td>
-                    <td>{review.review_text || "-"}</td>
+                    <td className="verification-review-text" title={review.review_text || "-"}>
+                      {review.review_text || "-"}
+                    </td>
                     <td><span className={`admin-badge ${String(review.status || "").toLowerCase()}`}>{review.status || "-"}</span></td>
                     <td>{review.created_at ? new Date(review.created_at).toLocaleString() : "-"}</td>
                     {showActionsColumn ? (
