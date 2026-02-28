@@ -220,6 +220,17 @@ const Payouts = () => {
     } finally { setSaving(false); }
   };
 
+  const handleMarkAllPayoutsPaid = async (payoutIds, participantName) => {
+    setSaving(true); setError(""); setSuccess("");
+    try {
+      await Promise.all(payoutIds.map((id) => markPayoutPaid(id)));
+      setSuccess(`Marked all payouts for ${participantName || "participant"} as paid.`);
+      await loadData();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to mark payouts as paid.");
+    } finally { setSaving(false); }
+  };
+
   useEffect(() => { loadData(); }, []);
 
   /* brand summaries — always from all eligible rows */
@@ -466,46 +477,71 @@ const Payouts = () => {
             <tbody>
               {filteredBatches.map((batch) => {
                 const batchStatus = normalizeBatchStatus(batch?.status);
-                const participants = Array.isArray(batch?.participants) ? batch.participants : [];
-                return participants.map((p, idx) => {
-                  const isPaid = (p.payout_status || normalizeBatchStatus(batchStatus)) === "PAID";
+                const rawParticipants = Array.isArray(batch?.participants) ? batch.participants : [];
+
+                // Group payout rows by participant_id so a participant with 2 products
+                // shows as ONE row with a numbered product list and summed amount.
+                const grouped = [];
+                const seen = new Map();
+                for (const p of rawParticipants) {
+                  const pid = p.id;
+                  if (!seen.has(pid)) {
+                    seen.set(pid, {
+                      ...p,
+                      products: p.product_name ? [p.product_name] : [],
+                      total_amount: Number(p.product_amount) || 0,
+                      payout_ids: p.payout_id ? [p.payout_id] : [],
+                      all_paid: p.payout_status === "PAID",
+                    });
+                    grouped.push(seen.get(pid));
+                  } else {
+                    const g = seen.get(pid);
+                    if (p.product_name) g.products.push(p.product_name);
+                    g.total_amount += Number(p.product_amount) || 0;
+                    if (p.payout_id) g.payout_ids.push(p.payout_id);
+                    if (p.payout_status !== "PAID") g.all_paid = false;
+                  }
+                }
+
+                return grouped.map((g, idx) => {
+                  const isPaid = g.all_paid;
                   return (
-                    <tr key={`${batch.id}-${p.payout_id || idx}`} style={{ background: isPaid ? "#f8fef8" : undefined }}>
+                    <tr key={`${batch.id}-${g.id}-${idx}`} style={{ background: isPaid ? "#f8fef8" : undefined }}>
                       {idx === 0 && (
-                        <td rowSpan={participants.length} style={{ verticalAlign: "top", fontFamily: "monospace", fontSize: 11, color: "#6b7f94", wordBreak: "break-all", maxWidth: 120 }}>
+                        <td rowSpan={grouped.length} style={{ verticalAlign: "top", fontFamily: "monospace", fontSize: 11, color: "#6b7f94", wordBreak: "break-all", maxWidth: 120 }}>
                           {batch.id}
                         </td>
                       )}
                       <td>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{p.full_name || "-"}</div>
-                        <div style={{ fontSize: 11, color: "#6b7f94" }}>{p.email || ""}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{g.full_name || "-"}</div>
+                        <div style={{ fontSize: 11, color: "#6b7f94" }}>{g.email || ""}</div>
                       </td>
-                      <td style={{ maxWidth: 280 }}>
-                        {!p.product_name ? (
+                      <td style={{ maxWidth: 300 }}>
+                        {g.products.length === 0 ? (
                           <span style={{ color: "#9eb4c8", fontSize: 13 }}>-</span>
                         ) : (
                           <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
-                            {(Array.isArray(p.product_name) ? p.product_name : [p.product_name]).map((name, i) => (
-                              <li key={i} style={{ marginBottom: 3, lineHeight: 1.4 }}>{name}</li>
+                            {g.products.map((name, i) => (
+                              <li key={i} style={{ marginBottom: 4, lineHeight: 1.5 }}>{name}</li>
                             ))}
                           </ol>
                         )}
                       </td>
                       <td style={{ textAlign: "right", fontWeight: 700, fontSize: 13 }}>
-                        {p.product_amount ? fmt(p.product_amount) : "-"}
+                        {g.total_amount > 0 ? fmt(g.total_amount) : "-"}
                       </td>
-                      <td style={{ fontSize: 13 }}>{p.bank_account_number || "-"}</td>
-                      <td style={{ fontSize: 13 }}>{p.bank_ifsc || "-"}</td>
+                      <td style={{ fontSize: 13 }}>{g.bank_account_number || "-"}</td>
+                      <td style={{ fontSize: 13 }}>{g.bank_ifsc || "-"}</td>
                       <td style={{ fontSize: 12, color: "#6b7f94", maxWidth: 200 }}>
-                        {[p.address_line1, p.address_line2, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ") || "-"}
+                        {[g.address_line1, g.address_line2, g.city, g.state, g.pincode, g.country].filter(Boolean).join(", ") || "-"}
                       </td>
                       {idx === 0 && (
-                        <td rowSpan={participants.length} style={{ verticalAlign: "top" }}>
+                        <td rowSpan={grouped.length} style={{ verticalAlign: "top" }}>
                           <span className={`admin-badge ${batchStatus.toLowerCase()}`}>{batchStatus}</span>
                         </td>
                       )}
                       {idx === 0 && (
-                        <td rowSpan={participants.length} style={{ verticalAlign: "top", fontSize: 12, color: "#6b7f94", whiteSpace: "nowrap" }}>
+                        <td rowSpan={grouped.length} style={{ verticalAlign: "top", fontSize: 12, color: "#6b7f94", whiteSpace: "nowrap" }}>
                           {batch?.created_at ? new Date(batch.created_at).toLocaleString() : "-"}
                         </td>
                       )}
@@ -514,26 +550,22 @@ const Payouts = () => {
                           <span className="admin-badge paid" style={{ fontSize: 11 }}>PAID</span>
                         ) : (
                           <div className="admin-actions" style={{ gap: 6 }}>
-                            {p.payout_id && (
-                              <button
-                                className="admin-btn"
-                                style={{ fontSize: 12, padding: "4px 10px", height: "auto" }}
-                                onClick={() => handleExportPayout(p.payout_id, p.full_name)}
-                                disabled={saving}
-                              >
-                                Export
-                              </button>
-                            )}
-                            {p.payout_id && (
-                              <button
-                                className="admin-btn primary"
-                                style={{ fontSize: 12, padding: "4px 10px", height: "auto" }}
-                                onClick={() => handleMarkPayoutPaid(p.payout_id, p.full_name)}
-                                disabled={saving}
-                              >
-                                Mark Paid
-                              </button>
-                            )}
+                            <button
+                              className="admin-btn"
+                              style={{ fontSize: 12, padding: "4px 10px", height: "auto" }}
+                              onClick={() => handleExportPayout(g.payout_ids[0], g.full_name)}
+                              disabled={saving}
+                            >
+                              Export
+                            </button>
+                            <button
+                              className="admin-btn primary"
+                              style={{ fontSize: 12, padding: "4px 10px", height: "auto" }}
+                              onClick={() => handleMarkAllPayoutsPaid(g.payout_ids, g.full_name)}
+                              disabled={saving}
+                            >
+                              Mark Paid
+                            </button>
                           </div>
                         )}
                       </td>
