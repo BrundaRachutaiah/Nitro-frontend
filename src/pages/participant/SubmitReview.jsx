@@ -230,7 +230,31 @@ const SubmitReview = () => {
           reviewText: finalReviewText,
           reviewUrl: finalReviewUrl
         });
-        setMessage("Review submitted and awaiting admin approval.");
+
+        // Mark this product's review as submitted in local state so the UI advances to next product
+        setAllocations((prev) => prev.map((row) => {
+          if (row.id !== allocationId) return row;
+          const updatedProducts = (Array.isArray(row.selected_products) ? row.selected_products : []).map((product) =>
+            String(product?.product_id || "") === String(productId || "")
+              ? { ...product, review_submission: { ...(product?.review_submission || {}), status: "PENDING", created_at: new Date().toISOString() } }
+              : product
+          );
+          // Also mark allocation-level review for single-product fallback
+          const updatedAlloc = updatedProducts.length === 1 && !productId
+            ? { ...row, review_submission: { status: "PENDING", created_at: new Date().toISOString() }, selected_products: updatedProducts }
+            : { ...row, selected_products: updatedProducts };
+          return updatedAlloc;
+        }));
+
+        // Count remaining products that still need a review
+        const remainingProducts = pendingProducts.filter(
+          (product) => String(product?.product_id || "") !== String(productId || "")
+        );
+        setMessage(
+          remainingProducts.length
+            ? `✅ Review submitted for this product! Next: submit review for "${remainingProducts[0]?.product_name || "the next product"}".`
+            : "🎉 All reviews submitted! Awaiting admin approval."
+        );
       } else if (needsFeedback) {
         if (!feedbackText.trim()) {
           setError("Please add your feedback.");
@@ -244,13 +268,33 @@ const SubmitReview = () => {
           rating: Number(rating),
           feedbackText: feedbackText.trim()
         });
-        setMessage("Feedback submitted successfully.");
+
+        // Mark this product's feedback as submitted in local state
+        setAllocations((prev) => prev.map((row) => {
+          if (row.id !== allocationId) return row;
+          const updatedProducts = (Array.isArray(row.selected_products) ? row.selected_products : []).map((product) =>
+            String(product?.product_id || "") === String(productId || "")
+              ? { ...product, feedback_submission: { created_at: new Date().toISOString() } }
+              : product
+          );
+          return { ...row, selected_products: updatedProducts };
+        }));
+
+        const remainingFeedback = pendingProducts.filter(
+          (product) => String(product?.product_id || "") !== String(productId || "")
+        );
+        setMessage(
+          remainingFeedback.length
+            ? `✅ Feedback submitted! Next: submit feedback for "${remainingFeedback[0]?.product_name || "the next product"}".`
+            : "🎉 All feedback submitted successfully."
+        );
       }
 
       setReviewFiles([]);
       setReviewText("");
       setReviewUrl("");
       setFeedbackText("");
+      setRating(5);
     } catch (err) {
       setError(err.response?.data?.message || "Submission failed.");
     } finally {
@@ -296,7 +340,7 @@ const SubmitReview = () => {
           {!loading && allocations.length ? (
             <form onSubmit={handleSubmit} className="participant-action-form">
               <label htmlFor="allocationId">Task</label>
-              <select id="allocationId" value={allocationId} onChange={(e) => setAllocationId(e.target.value)}>
+              <select id="allocationId" value={allocationId} onChange={(e) => { setAllocationId(e.target.value); setMessage(""); }}>
                 {allocations.map((row) => {
                   const title = row?.projects?.title || row?.projects?.name || row.id;
                   return (
@@ -307,18 +351,80 @@ const SubmitReview = () => {
                 })}
               </select>
 
-              {selectedAllocation ? (
-                <p className="participant-action-note">
-                  Task: {needsReview ? "Submit Review" : needsFeedback ? "Submit Feedback" : "Completed"}
-                  {Array.isArray(selectedAllocation?.selected_products) && selectedAllocation.selected_products.length
-                    ? ` | Product set size: ${selectedAllocation.selected_products.length}`
-                    : ""}
-                </p>
+              {/* Product progress checklist — shown when allocation has multiple products */}
+              {Array.isArray(selectedAllocation?.selected_products) && selectedAllocation.selected_products.length > 0 ? (() => {
+                const allProducts = selectedAllocation.selected_products;
+                const submittedCount = allProducts.filter((p) => {
+                  const hasReview = Boolean(p?.review_submission) && String(p?.review_submission?.status || "").toUpperCase() !== "REJECTED";
+                  const hasFeedback = Boolean(p?.feedback_submission);
+                  return hasReview || hasFeedback;
+                }).length;
+                const totalCount = allProducts.length;
+                const pct = totalCount > 0 ? Math.round((submittedCount / totalCount) * 100) : 0;
+                return (
+                  <div style={{ margin: "1rem 0", padding: "1rem", background: "#f8f9fa", borderRadius: "8px", border: "1px solid #e9ecef" }}>
+                    <div style={{ fontWeight: 600, marginBottom: "0.5rem", fontSize: "0.9rem" }}>
+                      📋 Review Progress — {submittedCount} of {totalCount} products done
+                    </div>
+                    <div style={{ background: "#e9ecef", borderRadius: "4px", height: "8px", marginBottom: "0.75rem" }}>
+                      <div style={{ background: "#28a745", borderRadius: "4px", height: "8px", width: `${pct}%`, transition: "width 0.3s" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                      {allProducts.map((product) => {
+                        const hasReview = Boolean(product?.review_submission) && String(product?.review_submission?.status || "").toUpperCase() !== "REJECTED";
+                        const hasFeedback = Boolean(product?.feedback_submission);
+                        const done = hasReview || hasFeedback;
+                        const isCurrent = product.product_id === productId;
+                        return (
+                          <button
+                            key={product.product_id || product.application_id}
+                            type="button"
+                            disabled={done}
+                            onClick={() => { if (!done) { setProductId(product.product_id || ""); setMessage(""); } }}
+                            style={{
+                              display: "flex", alignItems: "center", gap: "0.5rem",
+                              padding: "0.4rem 0.75rem", borderRadius: "6px", border: "1px solid",
+                              cursor: done ? "default" : "pointer", textAlign: "left", fontSize: "0.875rem",
+                              background: done ? "#d4edda" : isCurrent ? "#cce5ff" : "#fff",
+                              borderColor: done ? "#c3e6cb" : isCurrent ? "#b8daff" : "#dee2e6",
+                              color: done ? "#155724" : isCurrent ? "#004085" : "#495057"
+                            }}
+                          >
+                            <span>{done ? "✓" : isCurrent ? "●" : "○"}</span>
+                            <span style={{ flex: 1 }}>{product.product_name || "Product"}</span>
+                            <span style={{
+                              fontSize: "0.75rem", padding: "0.1rem 0.5rem", borderRadius: "12px",
+                              background: done ? "#28a745" : isCurrent ? "#007bff" : "#6c757d", color: "#fff"
+                            }}>
+                              {done ? "Done" : isCurrent ? "Current" : "Pending"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })() : null}
+
+              {/* Current product banner */}
+              {selectedProduct && pendingProducts.length > 0 ? (
+                <div style={{ background: "#e7f3ff", border: "1px solid #b8daff", borderRadius: "8px", padding: "0.75rem 1rem", marginBottom: "0.5rem" }}>
+                  <div style={{ fontSize: "0.8rem", color: "#004085", marginBottom: "0.2rem" }}>
+                    {needsReview ? "Submitting review for:" : "Submitting feedback for:"}
+                  </div>
+                  <div style={{ fontWeight: 600, color: "#004085" }}>{selectedProduct.product_name || "Product"}</div>
+                  {pendingProducts.length > 1 ? (
+                    <div style={{ fontSize: "0.8rem", color: "#0056b3", marginTop: "0.2rem" }}>
+                      {pendingProducts.length} products still need a review
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
-              {pendingProducts.length ? (
+
+              {pendingProducts.length > 1 ? (
                 <>
-                  <label htmlFor="productId">Product</label>
-                  <select id="productId" value={productId} onChange={(e) => setProductId(e.target.value)}>
+                  <label htmlFor="productId">Select product to review</label>
+                  <select id="productId" value={productId} onChange={(e) => { setProductId(e.target.value); setMessage(""); }}>
                     {pendingProducts.map((product) => (
                       <option key={product.product_id || product.application_id} value={product.product_id || ""}>
                         {product.product_name || "Product"}
@@ -387,8 +493,23 @@ const SubmitReview = () => {
               ) : null}
 
               <button type="submit" disabled={submitting || (!needsReview && !needsFeedback)}>
-                {submitting ? "Submitting..." : needsReview ? "Submit Review" : needsFeedback ? "Submit Feedback" : "Completed"}
+                {submitting
+                  ? "Submitting..."
+                  : needsReview
+                    ? `Submit Review${selectedProduct ? ` for "${selectedProduct.product_name || "Product"}"` : ""}`
+                    : needsFeedback
+                      ? `Submit Feedback${selectedProduct ? ` for "${selectedProduct.product_name || "Product"}"` : ""}`
+                      : "Completed"}
               </button>
+
+              {/* All-done summary: show when no pending products remain */}
+              {!needsReview && !needsFeedback && pendingProducts.length === 0 && selectedAllocation ? (
+                <div style={{ marginTop: "1rem", padding: "1rem", background: "#d4edda", border: "1px solid #c3e6cb", borderRadius: "8px", textAlign: "center" }}>
+                  <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🎉</div>
+                  <strong style={{ color: "#155724" }}>All reviews submitted for this task!</strong>
+                  <p style={{ color: "#155724", margin: "0.25rem 0 0" }}>Your submissions are awaiting admin approval.</p>
+                </div>
+              ) : null}
             </form>
           ) : null}
         </section>
