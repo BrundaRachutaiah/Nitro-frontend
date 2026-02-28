@@ -173,7 +173,24 @@ const ProductTask = () => {
       setReviewMsg("✅ Review submitted! Awaiting admin approval.");
       setReviewUrl(""); setReviewText(""); setReviewFiles([]);
     } catch (err) {
-      setReviewErr(err.response?.data?.message || "Submission failed. Please try again.");
+      const msg = err.response?.data?.message || "Submission failed. Please try again.";
+      if (/already submitted/i.test(msg)) {
+        // Treat as already done — update local state and show success
+        setAllocations((prev) => prev.map((row) => {
+          if (row.id !== allocId) return row;
+          return {
+            ...row,
+            selected_products: (row.selected_products || []).map((p) =>
+              p.product_id === prodId
+                ? { ...p, review_submission: { status: "PENDING", created_at: new Date().toISOString() } }
+                : p
+            )
+          };
+        }));
+        setReviewMsg("✅ Review already submitted — awaiting admin approval.");
+      } else {
+        setReviewErr(msg);
+      }
     } finally { setReviewBusy(false); }
   };
 

@@ -113,7 +113,24 @@ const InlineTaskPanel = ({ prod, allocId, step, onStepChange, onClose, onDataUpd
       setRevMsg("✅ Review submitted! Awaiting admin approval.");
       setRevUrl(""); setRevText(""); setRevFiles([]);
       setTimeout(() => onClose(), 1400);
-    } catch (err) { setRevErr(err.response?.data?.message || "Submission failed."); }
+    } catch (err) {
+      const msg = err.response?.data?.message || "Submission failed.";
+      const alreadyDone = /already submitted/i.test(msg);
+      if (alreadyDone) {
+        // The review was already submitted (e.g. from another tab/session).
+        // Treat it as a success: update local state so the UI shows it as done.
+        onDataUpdate((prev) => prev.map((row) => row.id !== allocId ? row : ({
+          ...row,
+          selected_products: (row.selected_products || []).map((p) =>
+            p.product_id === prod.product_id ? { ...p, review_submission: { status: "PENDING", created_at: new Date().toISOString() } } : p
+          )
+        })));
+        setRevMsg("✅ Review already submitted — awaiting admin approval.");
+        setTimeout(() => onClose(), 1400);
+      } else {
+        setRevErr(msg);
+      }
+    }
     finally { setRevBusy(false); }
   };
 

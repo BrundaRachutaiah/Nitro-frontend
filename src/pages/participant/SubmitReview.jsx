@@ -296,7 +296,22 @@ const SubmitReview = () => {
       setFeedbackText("");
       setRating(5);
     } catch (err) {
-      setError(err.response?.data?.message || "Submission failed.");
+      const msg = err.response?.data?.message || "Submission failed.";
+      if (/already submitted/i.test(msg)) {
+        // Already submitted — mark as done in local state and advance UI
+        setAllocations((prev) => prev.map((row) => {
+          if (row.id !== allocationId) return row;
+          const updatedProducts = (Array.isArray(row.selected_products) ? row.selected_products : []).map((product) =>
+            String(product?.product_id || "") === String(productId || "")
+              ? { ...product, review_submission: { status: "PENDING", created_at: new Date().toISOString() } }
+              : product
+          );
+          return { ...row, selected_products: updatedProducts };
+        }));
+        setMessage("✅ Review already submitted — awaiting admin approval.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setSubmitting(false);
     }
