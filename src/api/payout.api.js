@@ -1,7 +1,7 @@
 import axios from "./axiosInstance";
 
-export const getEligiblePayouts = () =>
-  axios.get("/admin/payouts/eligible");
+export const getEligiblePayouts = (params = {}) =>
+  axios.get("/admin/payouts/eligible", { params });
 
 export const createBatch = (data) =>
   axios.post("/admin/payout-batches", data);
@@ -27,3 +27,12 @@ export const exportBatchesCSV = ({ status = "ALL", batchIds = [] } = {}) => axio
     responseType: "blob"
   }
 );
+
+// Per-participant payout actions
+export const exportPayoutCSV = (payoutId) => axios.get(
+  `/admin/payouts/${payoutId}/export`,
+  { responseType: "blob" }
+);
+
+export const markPayoutPaid = (payoutId) =>
+  axios.patch(`/admin/payouts/${payoutId}/mark-paid`);
