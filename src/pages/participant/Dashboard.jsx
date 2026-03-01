@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   API_BASE_URL,
@@ -10,11 +10,12 @@ import {
 import { getActiveCatalog } from "../../api/project.api";
 import "./Dashboard.css";
 
+/* ─── Fetch helper ─────────────────────────────────────────── */
 const fetchJson = async (path, token, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) },
     method: options.method || "GET",
-    body: options.body
+    body: options.body,
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.message || "Request failed");
@@ -30,10 +31,9 @@ const getPreviewImage = (primaryUrl, fallbackSeed = "nitro-product") => {
       if (hostname) return `https://logo.clearbit.com/${hostname}`;
     } catch { /* ignore */ }
   }
-  return `https://picsum.photos/seed/${encodeURIComponent(fallbackSeed)}/640/420`;
+  return `https://picsum.photos/seed/${encodeURIComponent(fallbackSeed)}/400/300`;
 };
 
-// Returns the most recent application row for a product, or null if never applied
 const getLatestProductApplication = (appliedProjects, productId) => {
   if (!productId || !Array.isArray(appliedProjects)) return null;
   const matches = appliedProjects.filter((row) => {
@@ -44,20 +44,19 @@ const getLatestProductApplication = (appliedProjects, productId) => {
   matches.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   return matches[0];
 };
+
 const formatDateTime = (value) => {
-  if (!value) return "-";
+  if (!value) return "—";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString();
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 };
 
 const formatInr = (value) => {
   const amount = Number(value);
-  if (!Number.isFinite(amount)) return "-";
+  if (!Number.isFinite(amount)) return "—";
   return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0
+    style: "currency", currency: "INR", maximumFractionDigits: 0,
   }).format(amount);
 };
 
@@ -68,631 +67,858 @@ const openProductLink = (url) => {
   window.open(normalized, "_blank", "noopener,noreferrer");
 };
 
+/* ─────────────────────────────────────────────────────────────
+   STRICT STATUS RESOLVER
+   Priority order: COMPLETED → PURCHASED → APPROVED → PENDING → REJECTED → FRESH
+   Only ONE state is ever true at a time.
+───────────────────────────────────────────────────────────── */
+const resolveCardState = (latestApplication) => {
+  if (!latestApplication) return "FRESH";
+  const app = String(latestApplication?.status || "").toUpperCase();
+  const alloc = String(latestApplication?.allocation?.status || "").toUpperCase();
+
+  // Completed beats everything
+  if (app === "COMPLETED" || alloc === "COMPLETED") return "COMPLETED";
+  // Purchased = product in hand, task ongoing
+  if (app === "PURCHASED") return "PURCHASED";
+  // Approved = admin said yes
+  if (app === "APPROVED") return "APPROVED";
+  // Pending = waiting
+  if (app === "PENDING") return "PENDING";
+  // Rejected
+  if (app === "REJECTED") return "REJECTED";
+  // Never applied
+  return "FRESH";
+};
+
+/* ─── Toast system ─────────────────────────────────────────── */
+let _toastId = 0;
+
+const ToastContainer = ({ toasts, onDismiss }) => (
+  <div className="nd-toast-container">
+    {toasts.map((t) => (
+      <div key={t.id} className={`nd-toast nd-toast--${t.type}`}>
+        <div className="nd-toast-icon-wrap">
+          {t.type === "success" && "✓"}
+          {t.type === "error"   && "✕"}
+          {t.type === "warning" && "!"}
+          {t.type === "info"    && "i"}
+        </div>
+        <p className="nd-toast-msg">{t.message}</p>
+        <button type="button" className="nd-toast-close" onClick={() => onDismiss(t.id)}>✕</button>
+      </div>
+    ))}
+  </div>
+);
+
+/* ─── Status badge (for list tabs) ────────────────────────── */
+const StatusBadge = ({ status }) => {
+  const map = {
+    PENDING:   ["Pending Review", "badge--pending"],
+    APPROVED:  ["Approved",       "badge--approved"],
+    REJECTED:  ["Rejected",       "badge--rejected"],
+    PURCHASED: ["In Progress",    "badge--purchased"],
+    COMPLETED: ["Completed",      "badge--completed"],
+  };
+  const [label, cls] = map[status] || [status, "badge--default"];
+  return <span className={`nd-badge ${cls}`}>{label}</span>;
+};
+
+/* ─────────────────────────────────────────────────────────────
+   PRODUCT CARD — exactly ONE status pill, ONE action button
+───────────────────────────────────────────────────────────── */
+const CARD_META = {
+  FRESH:     { pill: null,                                            pillCls: "",                      canSelect: true,  canTask: false },
+  PENDING:   { pill: "⏳  Awaiting Admin Approval",                  pillCls: "nd-pill--pending",      canSelect: false, canTask: false },
+  APPROVED:  { pill: "✓  Product Allocated to You",                  pillCls: "nd-pill--active",       canSelect: false, canTask: true  },
+  PURCHASED: { pill: "🛍  Product Purchased — Complete Your Tasks",   pillCls: "nd-pill--purchased",    canSelect: false, canTask: true  },
+  REJECTED:  { pill: "✕  Request Rejected",                          pillCls: "nd-pill--rejected",     canSelect: true,  canTask: false },
+  COMPLETED: { pill: "★  Completed",                                  pillCls: "nd-pill--done",         canSelect: true,  canTask: false },
+};
+
+const ProductCard = ({ item, isSelected, latestApplication, onSelect, onNavigate, addToast }) => {
+  const cardState = resolveCardState(latestApplication);
+  const { pill, pillCls, canSelect, canTask } = CARD_META[cardState];
+
+  const actionLabel = () => {
+    if (isSelected) return "✓ Selected";
+    if (cardState === "COMPLETED") return "Request Again";
+    if (cardState === "REJECTED")  return "Send New Request";
+    return "Select Product";
+  };
+
+  const handleSelect = (e) => {
+    e.stopPropagation();
+    const wasSelected = isSelected;
+    onSelect(item.selection_key);
+    if (!wasSelected) {
+      addToast(`"${item?.name?.slice(0, 40) || "Product"}" added to your request list.`, "info");
+    } else {
+      addToast(`"${item?.name?.slice(0, 40) || "Product"}" removed from your list.`, "info");
+    }
+  };
+
+  const handleTask = (e) => {
+    e.stopPropagation();
+    addToast("Opening your task for this product…", "info");
+    const allocId = latestApplication?.allocation?.id;
+    onNavigate(allocId);
+  };
+
+  return (
+    <article
+      className={[
+        "nd-product-card",
+        isSelected ? "nd-product-card--selected" : "",
+        cardState === "PENDING"   ? "nd-product-card--pending"   : "",
+        cardState === "APPROVED"  ? "nd-product-card--active"    : "",
+        cardState === "PURCHASED" ? "nd-product-card--active"    : "",
+        cardState === "COMPLETED" ? "nd-product-card--done"      : "",
+      ].filter(Boolean).join(" ")}
+    >
+      {/* ── Image ── */}
+      <div className="nd-card-img" onClick={() => openProductLink(item?.product_url)}>
+        <img
+          src={getPreviewImage(item?.image_url || item?.product_url, item.selection_key)}
+          alt={item?.name || "Product"}
+          loading="lazy"
+        />
+        <span className="nd-card-category">{item?.project_category || "General"}</span>
+        {isSelected && <div className="nd-card-check">✓</div>}
+      </div>
+
+      {/* ── Body ── */}
+      <div className="nd-card-body">
+        <h3 className="nd-card-title" title={item?.name}>{item?.name || "Product"}</h3>
+
+        <div className="nd-card-meta">
+          <span className="nd-card-client" title={item?.project_title}>
+            🏢 {item?.project_title || "Project"}
+          </span>
+          <span className="nd-card-price">
+            {formatInr(item?.price ?? item?.product_value ?? item?.product_price)}
+          </span>
+        </div>
+
+        {/* ── SINGLE status pill ── */}
+        {pill && (
+          <div className={`nd-pill ${pillCls}`}>{pill}</div>
+        )}
+
+        {/* ── SINGLE action button ── */}
+        <div className="nd-card-action">
+          {canTask && (
+            <button type="button" className="nd-btn nd-btn--task" onClick={handleTask}>
+              Go to My Tasks →
+            </button>
+          )}
+          {canSelect && (
+            <button
+              type="button"
+              className={`nd-btn ${isSelected ? "nd-btn--selected" : "nd-btn--select"}`}
+              onClick={handleSelect}
+            >
+              {actionLabel()}
+            </button>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+};
+
+/* ─── Empty state ──────────────────────────────────────────── */
+const EmptyState = ({ icon, title, subtitle }) => (
+  <div className="nd-empty">
+    <div className="nd-empty-icon">{icon}</div>
+    <h3>{title}</h3>
+    <p>{subtitle}</p>
+  </div>
+);
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN DASHBOARD
+═══════════════════════════════════════════════════════════════ */
 const ParticipantDashboard = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [user, setUser] = useState(null);
+
+  const [loading, setLoading]         = useState(true);
+  const [user, setUser]               = useState(null);
   const [profileCompletion, setProfileCompletion] = useState(0);
-  const [activeProjects, setActiveProjects] = useState([]);
-  const [appliedProjects, setAppliedProjects] = useState([]);
-  const [catalogProjects, setCatalogProjects] = useState([]);
+  const [activeProjects, setActiveProjects]       = useState([]);
+  const [appliedProjects, setAppliedProjects]     = useState([]);
+  const [completedProjects, setCompletedProjects] = useState([]);
   const [dashboardProducts, setDashboardProducts] = useState([]);
   const [selectedProductKeys, setSelectedProductKeys] = useState([]);
-  const [sendingProductRequest, setSendingProductRequest] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [sendingRequest, setSendingRequest]       = useState(false);
+  const [searchTerm, setSearchTerm]   = useState("");
   const [clientFilter, setClientFilter] = useState("ALL");
-  const [topNav, setTopNav] = useState("dashboard");
-  const [allocationView, setAllocationView] = useState("allocation");
-  const [catalogNotice, setCatalogNotice] = useState("");
-  const [isFirstDashboardVisit, setIsFirstDashboardVisit] = useState(false);
-  const [verifiedUnlockedProductMap, setVerifiedUnlockedProductMap] = useState({});
-  const [approvedNotifications, setApprovedNotifications] = useState([]);
+  const [activeTab, setActiveTab]     = useState("catalog");
+  const [isFirstVisit, setIsFirstVisit] = useState(false);
+  const [toasts, setToasts]           = useState([]);
+  const [notifBell, setNotifBell]     = useState([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const notifRef = useRef(null);
 
-  const displayName = useMemo(() => {
-    const fullName = user?.full_name?.trim?.() || "";
-    if (fullName) return fullName.split(" ")[0] || fullName;
-    const email = String(user?.email || "").trim();
-    if (email.includes("@")) return email.split("@")[0];
-    return "Participant";
-  }, [user]);
+  /* ── toast helpers ── */
+  const addToast = useCallback((message, type = "info") => {
+    const id = ++_toastId;
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
+  }, []);
+  const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
 
-  const participantDashboardPath = user?.id ? `/participant/${user.id}/dashboard` : "/dashboard";
+  /* ── paths ── */
+  const uid  = user?.id;
+  const path = (seg) => uid ? `/participant/${uid}/${seg}` : "/dashboard";
 
+  /* ── load dashboard ── */
   const loadDashboard = useCallback(async () => {
     const token = getStoredToken();
     if (!token) { navigate("/login", { replace: true }); return; }
     setLoading(true);
-    setError("");
     try {
       const backendUser = await verifyBackendUser(token);
       const role = backendUser?.role?.toUpperCase?.() || "";
       if (role === "ADMIN" || role === "SUPER_ADMIN") { navigate("/dashboard", { replace: true }); return; }
-      if (role !== "PARTICIPANT") throw new Error("Unsupported role for participant dashboard.");
+      if (role !== "PARTICIPANT") throw new Error("Unsupported role.");
       setUser(backendUser);
 
-      const [profileRes, myProfileRes, activeRes, appliedRes, catalogRes] = await Promise.all([
+      const [profileRes, meRes, activeRes, appliedRes, completedRes, catalogRes] = await Promise.all([
         fetchJson("/users/me/profile-completion", token),
         fetchJson("/users/me", token),
         fetchJson("/projects/active", token),
         fetchJson("/projects/applied", token),
-        getActiveCatalog()
+        fetchJson("/projects/completed", token),
+        getActiveCatalog(),
       ]);
 
-      const profileUser = myProfileRes?.data || {};
-      setUser((prev) => ({ ...(prev || {}), ...(backendUser || {}), ...(profileUser || {}) }));
+      setUser((prev) => ({ ...(prev || {}), ...(backendUser || {}), ...(meRes?.data || {}) }));
+      setProfileCompletion(Number(profileRes?.data?.percentage) || 0);
+      setActiveProjects(Array.isArray(activeRes?.data) ? activeRes.data : []);
 
       const nextApplied = Array.isArray(appliedRes?.data) ? appliedRes.data : [];
-      const consumedProductIdsByProject = new Map();
-      const pushConsumedProduct = (projectId, productId) => {
-        if (!projectId || !productId) return;
-        if (!consumedProductIdsByProject.has(projectId)) consumedProductIdsByProject.set(projectId, new Set());
-        consumedProductIdsByProject.get(projectId).add(productId);
-      };
-      for (const row of nextApplied) {
-        const status = String(row?.status || "").toUpperCase();
-        const projectId = row?.project_id || row?.projects?.id;
-        const productId = row?.product_id || row?.project_products?.id;
-        if (["PURCHASED", "COMPLETED"].includes(status)) pushConsumedProduct(projectId, productId);
-      }
+      setAppliedProjects(nextApplied);
+      setCompletedProjects(Array.isArray(completedRes?.data) ? completedRes.data : []);
 
       const nextCatalog = Array.isArray(catalogRes?.data?.data) ? catalogRes.data.data : [];
-      const activeProjectItems = Array.isArray(activeRes?.data) ? activeRes.data : [];
-      const activeProjectsFromActive = activeProjectItems.map((row) => row?.projects).filter(Boolean);
-      const catalogIds = new Set(nextCatalog.map((p) => p.id));
-      const extraProjects = activeProjectsFromActive.filter((p) => p?.id && !catalogIds.has(p.id));
-      const allProjects = [...nextCatalog, ...extraProjects];
+      const activeItems = Array.isArray(activeRes?.data) ? activeRes.data : [];
+      const activeProjs = activeItems.map((r) => r?.projects).filter(Boolean);
+      const catalogIds  = new Set(nextCatalog.map((p) => p.id));
+      const allProjects = [...nextCatalog, ...activeProjs.filter((p) => p?.id && !catalogIds.has(p.id))];
 
-      const productBuckets = await Promise.all(
+      const buckets = await Promise.all(
         allProjects.map(async (project) => {
           try {
-            const productsRes = await fetchJson(`/projects/${project.id}/products`, token);
-            const rows = Array.isArray(productsRes?.data?.products) ? productsRes.data.products : [];
+            const res = await fetchJson(`/projects/${project.id}/products`, token);
+            const rows = Array.isArray(res?.data?.products) ? res.data.products : [];
             return rows.map((product) => ({
               ...product,
               project_id: project.id,
               project_title: project?.title || project?.name || "Project",
               project_category: project?.category || "General",
-              created_by_name: project?.created_by_name || "Client",
               selection_key: `${project.id}::${product.id}`,
             }));
           } catch { return []; }
         })
       );
 
-      const nextProducts = productBuckets.flat().filter((item) => {
-        const name = String(item?.name || "").trim();
-        const url = String(item?.product_url || "").trim();
-        return Boolean(name && url && item?.id && item?.project_id);
-      });
-
-      setVerifiedUnlockedProductMap({});
-      setDashboardProducts(nextProducts);
+      setDashboardProducts(
+        buckets.flat().filter((item) =>
+          Boolean(String(item?.name || "").trim() && String(item?.product_url || "").trim() && item?.id && item?.project_id)
+        )
+      );
       setSelectedProductKeys([]);
-      setProfileCompletion(Number(profileRes?.data?.percentage) || 0);
-      setActiveProjects(Array.isArray(activeRes?.data) ? activeRes.data : []);
-      setAppliedProjects(nextApplied);
-      setCatalogProjects(nextCatalog);
 
+      /* ── Notifications ── */
       try {
         const notifRes = await fetchJson("/notifications", token);
         const notifs = Array.isArray(notifRes?.data) ? notifRes.data : [];
-        setApprovedNotifications(
-          notifs.filter(
-            (n) =>
-              ["PRODUCT_APPLICATION_APPROVED", "PRODUCT_APPLICATION_REJECTED"].includes(String(n.type || "").toUpperCase())
-              && !n.is_read
-          )
-        );
+        const unread  = notifs.filter((n) => !n.is_read);
+        setNotifBell(unread);
+        // Show toast for each unread notification (max 3)
+        unread.slice(0, 3).forEach((n, i) => {
+          const isApproved = String(n.type || "").toUpperCase().includes("APPROVED");
+          const isRejected = String(n.type || "").toUpperCase().includes("REJECTED");
+          setTimeout(() => {
+            if (n.message) addToast(n.message, isApproved ? "success" : isRejected ? "error" : "info");
+          }, i * 600);
+        });
       } catch { /* non-critical */ }
 
     } catch (err) {
       if (/token|unauthorized|expired|forbidden/i.test(err.message || "")) {
         clearStoredTokens(); navigate("/login", { replace: true }); return;
       }
-      setError(err.message || "Unable to load participant dashboard.");
+      addToast(err.message || "Unable to load dashboard.", "error");
     } finally { setLoading(false); }
-  }, [navigate]);
+  }, [navigate, addToast]);
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
+  useEffect(() => {
+    if (!uid) return;
+    const key = `nitro_seen_${uid}`;
+    try {
+      const seen = window.localStorage.getItem(key) === "1";
+      setIsFirstVisit(!seen);
+      if (!seen) window.localStorage.setItem(key, "1");
+    } catch { setIsFirstVisit(false); }
+  }, [uid]);
+
+  /* close notif panel on outside click */
+  useEffect(() => {
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) setShowNotifPanel(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const handleLogout = async () => {
+    addToast("Logging you out…", "info");
     const token = getStoredToken();
     await signOutFromSupabase(token);
     clearStoredTokens();
     navigate("/login", { replace: true });
   };
 
-  const participantPayoutPath = user?.id ? `/participant/${user.id}/payouts` : "/dashboard";
-  const participantAllocationPath = user?.id ? `/participant/${user.id}/allocation/active` : "/dashboard";
-  const participantProfilePath = user?.id ? `/participant/${user.id}/profile` : "/dashboard";
+  const dismissAllNotifications = async () => {
+    const ids = notifBell.map((n) => n.id).filter(Boolean);
+    const token = getStoredToken();
+    setNotifBell([]);
+    setShowNotifPanel(false);
+    addToast("All notifications cleared.", "info");
+    try {
+      await Promise.all(ids.map((id) => fetchJson(`/notifications/${id}/read`, token, { method: "PATCH" })));
+    } catch { /* ignore */ }
+  };
 
-  const filteredDashboardProducts = useMemo(() => {
+  /* ── derived ── */
+  const displayName = useMemo(() => {
+    const fn = user?.full_name?.trim?.() || "";
+    if (fn) return fn.split(" ")[0] || fn;
+    const em = String(user?.email || "").trim();
+    if (em.includes("@")) return em.split("@")[0];
+    return "Participant";
+  }, [user]);
+
+  const filteredProducts = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return dashboardProducts.filter((item) => {
-      const clientName = String(item?.project_title || "").trim();
-      const title = String(item?.project_title || "").toLowerCase();
-      const productName = String(item?.name || "").toLowerCase();
-      const category = String(item?.category || "").toLowerCase();
-      const matchesSearch = !term || title.includes(term) || productName.includes(term) || category.includes(term);
-      const matchesClient = clientFilter === "ALL" || clientName === clientFilter;
-      return matchesSearch && matchesClient;
+      const matchSearch = !term
+        || String(item?.name || "").toLowerCase().includes(term)
+        || String(item?.project_title || "").toLowerCase().includes(term)
+        || String(item?.project_category || "").toLowerCase().includes(term);
+      const matchClient = clientFilter === "ALL" || String(item?.project_title || "").trim() === clientFilter;
+      return matchSearch && matchClient;
     });
   }, [dashboardProducts, searchTerm, clientFilter]);
 
   const clientFilterOptions = useMemo(() => {
-    const unique = new Set(
-      dashboardProducts
-        .map((item) => String(item?.project_title || "").trim())
-        .filter(Boolean)
-    );
+    const unique = new Set(dashboardProducts.map((item) => String(item?.project_title || "").trim()).filter(Boolean));
     return Array.from(unique).sort((a, b) => a.localeCompare(b));
   }, [dashboardProducts]);
 
-  const unlockedProjects = useMemo(
-    () => catalogProjects.filter((item) => String(item?.access_status || "").toUpperCase() === "APPROVED"),
-    [catalogProjects]
-  );
-
-  const approvedWithoutAllocation = useMemo(
-    () => appliedProjects.filter((item) => {
-      const status = String(item?.status || "").toUpperCase();
-      return status === "APPROVED" && !item?.allocation?.id;
-    }),
-    [appliedProjects]
-  );
-
-  const activeTabCount = useMemo(() => {
-    const allocatedProjectIds = new Set(activeProjects.map((row) => row?.projects?.id).filter(Boolean));
-    const approvedNoAllocationProjectIds = new Set(approvedWithoutAllocation.map((item) => item?.project_id).filter(Boolean));
-    const allocatedCount = activeProjects.filter((item) => Boolean(String((item?.selected_product || item?.project_products)?.name || "").trim())).length;
-    const approvedWithoutAllocationCount = approvedWithoutAllocation
-      .filter((item) => !allocatedProjectIds.has(item?.project_id))
-      .filter((item) => Boolean(String((item?.selected_product || item?.project_products)?.name || "").trim())).length;
-    const unlockedOnlyCount = unlockedProjects
-      .filter((project) => verifiedUnlockedProductMap?.[project.id] === true)
-      .filter((project) => !allocatedProjectIds.has(project.id) && !approvedNoAllocationProjectIds.has(project.id)).length;
-    return allocatedCount + unlockedOnlyCount + approvedWithoutAllocationCount;
-  }, [activeProjects, unlockedProjects, approvedWithoutAllocation, verifiedUnlockedProductMap]);
-
   const selectedProducts = useMemo(() => {
-    const selectedSet = new Set(selectedProductKeys);
-    return dashboardProducts.filter((item) => selectedSet.has(item.selection_key));
+    const s = new Set(selectedProductKeys);
+    return dashboardProducts.filter((item) => s.has(item.selection_key));
   }, [dashboardProducts, selectedProductKeys]);
 
-  const selectableSelectedProducts = selectedProducts;
+  /* Applied = PENDING + REJECTED only */
+  const appliedRows = useMemo(() =>
+    appliedProjects.filter((item) => ["PENDING", "REJECTED"].includes(String(item?.status || "").toUpperCase()))
+  , [appliedProjects]);
+
+  /* Approved rows grouped by allocation */
   const approvedRows = useMemo(() => {
-    const approved = appliedProjects.filter(
-      (item) => String(item?.status || "").toUpperCase() === "APPROVED"
-    );
-
-    // Group by allocationId (one allocation per project) so multiple products
-    // under the same project/allocation appear as a single row with one action button.
-    const allocationMap = new Map();
-
+    const approved = appliedProjects.filter((item) => String(item?.status || "").toUpperCase() === "APPROVED");
+    const map = new Map();
     for (const item of approved) {
-      const allocationId = item?.allocation?.id || null;
-      // Use allocationId as key when present; fall back to project_id so
-      // items without an allocation are still grouped correctly.
-      const groupKey = allocationId || `project::${item?.project_id || item.id}`;
-
-      if (!allocationMap.has(groupKey)) {
-        allocationMap.set(groupKey, {
+      const allocId  = item?.allocation?.id || null;
+      const groupKey = allocId || `proj::${item?.project_id || item.id}`;
+      if (!map.has(groupKey)) {
+        map.set(groupKey, {
           id: item.id,
-          projectTitle: item?.projects?.title || item?.project_id || "-",
+          projectTitle: item?.projects?.title || "—",
           productNames: [],
           requestedAt: item?.reviewed_at || item?.created_at || null,
-          allocationId,
-          allocationStatus: item?.allocation?.status || null
+          allocationId: allocId,
+          allocationStatus: item?.allocation?.status || null,
         });
       }
-
-      const group = allocationMap.get(groupKey);
-      const productName = item?.project_products?.name || item?.product_id || "-";
-      if (!group.productNames.includes(productName)) {
-        group.productNames.push(productName);
-      }
-      // Keep the most recent requestedAt within the group
-      const itemDate = new Date(item?.reviewed_at || item?.created_at || 0);
-      if (itemDate > new Date(group.requestedAt || 0)) {
-        group.requestedAt = item?.reviewed_at || item?.created_at || null;
+      const g = map.get(groupKey);
+      const pn = item?.project_products?.name || "—";
+      if (!g.productNames.includes(pn)) g.productNames.push(pn);
+      if (new Date(item?.reviewed_at || item?.created_at || 0) > new Date(g.requestedAt || 0)) {
+        g.requestedAt = item?.reviewed_at || item?.created_at || null;
       }
     }
-
-    return Array.from(allocationMap.values())
-      .map((group) => ({
-        ...group,
-        productName: group.productNames.join(", ")
-      }))
+    return Array.from(map.values())
+      .map((g) => ({ ...g, productName: g.productNames.join(", ") }))
       .sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0));
   }, [appliedProjects]);
 
-  useEffect(() => {
-    const userId = user?.id;
-    if (!userId) return;
-    const key = `nitro_dashboard_seen_${userId}`;
-    try {
-      const seen = window.localStorage.getItem(key) === "1";
-      setIsFirstDashboardVisit(!seen);
-      if (!seen) window.localStorage.setItem(key, "1");
-    } catch { setIsFirstDashboardVisit(false); }
-  }, [user?.id]);
+  const activeTabCount = useMemo(() =>
+    activeProjects.filter((item) =>
+      Boolean(String((item?.selected_product || item?.project_products)?.name || "").trim())
+    ).length
+  , [activeProjects]);
 
-  const dismissAllDecisionNotifications = async () => {
-    const ids = approvedNotifications.map((item) => item.id).filter(Boolean);
-    if (!ids.length) return;
-
+  /* ── send request ── */
+  const sendRequest = async () => {
     const token = getStoredToken();
-    setApprovedNotifications([]);
-    try {
-      await Promise.all(
-        ids.map((id) => fetchJson(`/notifications/${id}/read`, token, { method: "PATCH" }))
-      );
-    } catch { /* ignore */ }
-  };
-
-  const decisionNotificationSummary = useMemo(() => {
-    if (!approvedNotifications.length) return null;
-
-    const uniqueMessages = [];
-    const seen = new Set();
-    for (const item of approvedNotifications) {
-      const message = String(item?.message || "").trim();
-      if (!message) continue;
-      if (!seen.has(message)) {
-        seen.add(message);
-        uniqueMessages.push(message);
-      }
-    }
-
-    return {
-      count: approvedNotifications.length,
-      lines: uniqueMessages
-    };
-  }, [approvedNotifications]);
-
-  const toggleProductSelection = (selectionKey) => {
-    setSelectedProductKeys((prev) =>
-      prev.includes(selectionKey) ? prev.filter((key) => key !== selectionKey) : [...prev, selectionKey]
-    );
-  };
-
-  const sendSelectedProductsToAdmin = async () => {
-    const token = getStoredToken();
-    if (!token || !selectableSelectedProducts.length) return;
-    setSendingProductRequest(true);
-    setError("");
-    setCatalogNotice("");
+    if (!token || !selectedProducts.length) return;
+    setSendingRequest(true);
+    addToast(`Sending ${selectedProducts.length} request(s) to admin…`, "info");
     try {
       const results = await Promise.allSettled(
-        selectableSelectedProducts.map((item) =>
+        selectedProducts.map((item) =>
           fetchJson(`/projects/${item.project_id}/apply`, token, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ productId: item.id || item.product_id })
+            body: JSON.stringify({ productId: item.id || item.product_id }),
           })
         )
       );
+      const success = results.filter((r) => r.status === "fulfilled" && r.value?.success && !r.value?.alreadyPending).length;
+      const already = results.filter((r) => r.status === "fulfilled" && r.value?.alreadyPending).length;
+      const failed  = results.filter((r) => r.status === "rejected").length;
 
-      const successCount = results.filter((r) => r.status === "fulfilled" && r.value?.success && !r.value?.alreadyPending).length;
-      const alreadyPendingCount = results.filter((r) => r.status === "fulfilled" && r.value?.alreadyPending === true).length;
-      const failedCount = results.filter((r) => r.status === "rejected").length;
-
-      if (successCount > 0) {
+      if (success > 0) {
         const appliedRes = await fetchJson("/projects/applied", token);
         setAppliedProjects(Array.isArray(appliedRes?.data) ? appliedRes.data : []);
+        addToast(`🎉 ${success} request${success > 1 ? "s" : ""} submitted! Admin will review soon.`, "success");
       }
-
+      if (already > 0) addToast(`⏳ ${already} product${already > 1 ? "s" : ""} already waiting for approval.`, "warning");
+      if (failed > 0)  addToast(`❌ ${failed} request${failed > 1 ? "s" : ""} could not be submitted. Try again.`, "error");
       setSelectedProductKeys([]);
-
-      if (successCount === 0 && alreadyPendingCount > 0 && failedCount === 0) {
-        setCatalogNotice("⏳ You have already applied for these products. Please wait for admin approval.");
-      } else if (successCount === 0 && failedCount > 0 && alreadyPendingCount === 0) {
-        setError("Unable to submit selected products right now. Please try again.");
-      } else {
-        const parts = [];
-        if (successCount > 0) parts.push(`🎉 ${successCount} request(s) submitted successfully!`);
-        if (alreadyPendingCount > 0) parts.push(`⏳ ${alreadyPendingCount} already pending admin approval.`);
-        if (failedCount > 0) parts.push(`❌ ${failedCount} could not be submitted.`);
-        setCatalogNotice(parts.join(" "));
-      }
     } catch (err) {
-      setError(err.message || "Unable to submit selected products.");
-    } finally { setSendingProductRequest(false); }
+      addToast(err.message || "Unable to submit request.", "error");
+    } finally { setSendingRequest(false); }
   };
 
-  if (loading) return <div className="participant-loading">Loading dashboard...</div>;
+  /* ── tab navigation with activity toasts ── */
+  const handleTabChange = (key) => {
+    setActiveTab(key);
+    const messages = {
+      catalog:   "Browsing available products.",
+      approved:  "Viewing your approved products.",
+      applied:   "Viewing your pending applications.",
+      completed: "Viewing your completed campaigns.",
+    };
+    if (messages[key]) addToast(messages[key], "info");
+  };
 
+  /* ── tabs ── */
+  const tabs = [
+    { key: "catalog",   label: "Browse Products", count: filteredProducts.length },
+    { key: "approved",  label: "Approved",         count: approvedRows.length },
+    { key: "applied",   label: "Applied",          count: appliedRows.length },
+    { key: "completed", label: "Completed",        count: completedProjects.length },
+  ];
+
+  /* ── loading screen ── */
+  if (loading) {
+    return (
+      <div className="nd-loading-screen">
+        <div className="nd-loading-spinner" />
+        <p>Loading your dashboard…</p>
+      </div>
+    );
+  }
+
+  /* ─────────────────────────────────────────────────────────── */
   return (
-    <div className="participant-dashboard">
-      <header className="participant-topbar">
-        <div className="participant-brand-wrap">
-          <div className="participant-brand">Nitro</div>
-          <small>Buy. Review. Earn Rewards.</small>
+    <div className="nd-dashboard">
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* ══ TOPBAR ══ */}
+      <header className="nd-topbar">
+        <div className="nd-brand">
+          <span className="nd-brand-name">Nitro</span>
+          <span className="nd-brand-tag">Buy · Review · Earn</span>
         </div>
-        <div className="participant-search-wrap">
-          <input type="text" className="participant-search" placeholder="Search projects..." value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} />
+
+        <div className="nd-search-wrap">
+          <span className="nd-search-icon">⌕</span>
+          <input
+            type="text"
+            className="nd-search"
+            placeholder="Search products or brands…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
-        <nav className="participant-nav-links">
-          <button type="button" className={topNav === "dashboard" ? "is-active" : ""} onClick={() => { setTopNav("dashboard"); navigate(participantDashboardPath); }}>Dashboard</button>
-          <button type="button" className={topNav === "payouts" ? "is-active" : ""} onClick={() => { setTopNav("payouts"); navigate(participantPayoutPath); }}>Payouts</button>
-          <button type="button" className={topNav === "profile" ? "is-active" : ""} onClick={() => { setTopNav("profile"); navigate(participantProfilePath); }}>Profile</button>
+
+        <nav className="nd-nav">
+          <button type="button" className="nd-nav-btn nd-nav-btn--active" onClick={() => navigate(path("dashboard"))}>Dashboard</button>
+          <button type="button" className="nd-nav-btn" onClick={() => { addToast("Opening Payouts page…", "info"); navigate(path("payouts")); }}>Payouts</button>
+          <button type="button" className="nd-nav-btn" onClick={() => { addToast("Opening your Profile…", "info"); navigate(path("profile")); }}>Profile</button>
         </nav>
-        <button type="button" className="participant-logout" onClick={handleLogout}>Logout</button>
-      </header>
 
-      <main className="participant-main">
-        <section className="participant-hero">
-          <div>
-            <h1>{isFirstDashboardVisit ? `Welcome, ${displayName}!` : `Welcome back, ${displayName}!`}</h1>
-            <p>You have {activeTabCount} active projects in progress.</p>
-          </div>
-          <div className="participant-completion">
-            <div className="participant-completion-head">
-              <span>Profile Completion</span>
-              <strong>{profileCompletion}%</strong>
-            </div>
-            <div className="participant-progress-track">
-              <div className="participant-progress-fill" style={{ width: `${Math.max(0, Math.min(100, profileCompletion))}%` }} />
-            </div>
-            <small>Complete your profile to unlock more campaigns.</small>
-          </div>
-        </section>
-
-        {error ? (
-          <div className="participant-alert" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>{error}</span>
-            <button type="button" onClick={() => setError("")} style={{ background: "transparent", border: "none", color: "inherit", fontSize: "1.2rem", cursor: "pointer", marginLeft: 12 }}>✕</button>
-          </div>
-        ) : null}
-
-        {decisionNotificationSummary ? (
-          <div style={{ marginTop: "1rem", background: "rgba(16,107,66,0.28)", border: "1px solid rgba(56,214,139,0.5)", color: "#c8ffe7", padding: "0.85rem 1rem", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
-            <div>
-              <strong style={{ display: "block", marginBottom: "0.25rem", color: "#38e2a0" }}>
-                Product request updates ({decisionNotificationSummary.count})
-              </strong>
-              <ul style={{ margin: 0, paddingLeft: "1.1rem", fontSize: "0.93rem" }}>
-                {decisionNotificationSummary.lines.map((line) => (
-                  <li key={line} style={{ marginBottom: "0.3rem" }}>{line}</li>
-                ))}
-              </ul>
-            </div>
-            <button type="button" onClick={dismissAllDecisionNotifications} style={{ background: "transparent", border: "none", color: "#38e2a0", fontWeight: 700, fontSize: "1.1rem", cursor: "pointer", flexShrink: 0 }}>✕</button>
-          </div>
-        ) : null}
-
-        <section className="participant-available">
-          <div className="participant-allocation-switch" role="tablist" aria-label="Allocation and approvals">
+        <div className="nd-topbar-right">
+          {/* ── Bell ── */}
+          <div className="nd-notif-wrap" ref={notifRef}>
             <button
               type="button"
-              role="tab"
-              aria-selected={allocationView === "allocation"}
-              className={allocationView === "allocation" ? "is-active" : ""}
-              onClick={() => setAllocationView("allocation")}
+              className="nd-notif-btn"
+              onClick={() => setShowNotifPanel((v) => !v)}
+              aria-label="Notifications"
             >
-              Product Allocation
+              🔔
+              {notifBell.length > 0 && <span className="nd-notif-dot">{notifBell.length}</span>}
             </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={allocationView === "approved"}
-              className={allocationView === "approved" ? "is-active" : ""}
-              onClick={() => setAllocationView("approved")}
-            >
-              Approved Requests
-            </button>
-          </div>
 
-          {allocationView === "approved" ? (
-            <div className="participant-applied-table-wrap">
-              <table className="participant-applied-table">
-                <thead>
-                  <tr>
-                    <th>Project</th>
-                    <th>Product</th>
-                    <th>Approved At</th>
-                    <th>Allocation</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {approvedRows.length ? (
-                    approvedRows.map((row) => (
-                      <tr key={row.id}>
-                        <td>{row.projectTitle}</td>
-                        <td>{row.productName}</td>
-                        <td>{formatDateTime(row.requestedAt)}</td>
-                        <td>{row.allocationId ? (row.allocationStatus || "RESERVED") : "Pending"}</td>
-                        <td>
-                          {row.allocationId ? (
-                            <button
-                              type="button"
-                              className="participant-applied-action"
-                              onClick={() => navigate(`${participantAllocationPath}?allocation=${row.allocationId}`)}
-                            >
-                              Submit Invoice & Review
-                            </button>
-                          ) : (
-                            <button type="button" className="participant-applied-action" disabled>
-                              Allocation Pending
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="participant-muted">No approved products yet.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <>
-              {catalogNotice ? (
-                <div className="participant-notice-success" style={{ marginTop: 10 }}>{catalogNotice}</div>
-              ) : null}
-              <div className="participant-catalog-layout">
-                <aside className="participant-filter-sidebar">
-                  <h3>Filters</h3>
-                  <label htmlFor="participant-client-filter">Client / Brand</label>
-                  <select
-                    id="participant-client-filter"
-                    value={clientFilter}
-                    onChange={(event) => setClientFilter(event.target.value)}
-                  >
-                    <option value="ALL">All Clients</option>
-                    {clientFilterOptions.map((clientName) => (
-                      <option key={clientName} value={clientName}>
-                        {clientName}
-                      </option>
-                    ))}
-                  </select>
-                  <small>{filteredDashboardProducts.length} product(s)</small>
-                </aside>
-
-                <div className="participant-product-grid">
-                  {filteredDashboardProducts.length ? (
-                    filteredDashboardProducts.map((item) => {
-                      const isSelected = selectedProductKeys.includes(item.selection_key);
-                      const latestApplication = getLatestProductApplication(appliedProjects, item.id);
-                      const appStatus = String(latestApplication?.status || "").toUpperCase();
-                      const allocationStatus = String(latestApplication?.allocation?.status || "").toUpperCase();
-
-                      // States
-                      const isPending    = appStatus === "PENDING";
-                      const isApproved   = appStatus === "APPROVED" && allocationStatus !== "COMPLETED";
-                      const isRejected   = appStatus === "REJECTED";
-                      const isPurchased  = appStatus === "PURCHASED";
-                      const isCompleted  = appStatus === "COMPLETED" || allocationStatus === "COMPLETED";
-                      // Fresh select: never applied before
-                      const isFresh      = !appStatus;
-                      // Already bought: approved or purchased (product is in progress)
-                      const alreadyBought = isApproved || isPurchased;
-                      // Can send a new request only if fresh OR previously rejected
-                      const canSelect    = isFresh || isRejected;
-
-                      return (
-                        <article
-                          key={item.selection_key}
-                          className={`participant-product-card participant-product-card-clickable ${isSelected ? "is-selected" : ""}`}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => openProductLink(item?.product_url)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              openProductLink(item?.product_url);
-                            }
-                          }}
-                        >
-                          <div className="participant-product-image">
-                            <img
-                              src={getPreviewImage(item?.image_url || item?.product_url, `${item.selection_key}-allocation`)}
-                              alt={item?.name || "Product"}
-                              loading="lazy"
-                            />
-                          </div>
-                          <div className="participant-product-body">
-                            <span className="participant-product-tag">{item?.project_category || "General"}</span>
-                            <h3>{item?.name || "Product"}</h3>
-                            <p>Client: {item?.project_title || "Project"}</p>
-                            <p>Price: {formatInr(item?.price ?? item?.product_value ?? item?.product_price)}</p>
-
-                            {/* PENDING: waiting for admin */}
-                            {isPending && (
-                              <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.4)", color: "#fbbf24", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
-                                ⏳ Request Pending — Awaiting Admin Approval
-                              </div>
-                            )}
-
-                            {/* REJECTED: can re-apply */}
-                            {isRejected && (
-                              <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.35)", color: "#f87171", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
-                                ❌ Request Rejected — You can send a new request
-                              </div>
-                            )}
-
-                            {/* APPROVED / PURCHASED: already in progress — show "Go to My Tasks" */}
-                            {alreadyBought && (
-                              <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(14,165,207,0.1)", border: "1px solid rgba(14,165,207,0.35)", color: "#7dd3fc", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
-                                ✅ You already have this product
-                              </div>
-                            )}
-                            {alreadyBought && (
-                              <button
-                                type="button"
-                                className="participant-proof-btn participant-mini-action"
-                                style={{ marginTop: 6, background: "rgba(14,165,207,0.18)", border: "1px solid rgba(14,165,207,0.45)", color: "#e0f2fe" }}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  const allocId = latestApplication?.allocation?.id;
-                                  if (allocId) {
-                                    navigate(`${participantAllocationPath}?allocation=${allocId}`);
-                                  } else {
-                                    navigate(participantAllocationPath);
-                                  }
-                                }}
-                              >
-                                Go to My Tasks →
-                              </button>
-                            )}
-
-                            {/* COMPLETED: task done, allow re-applying for another round */}
-                            {isCompleted && (
-                              <div style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", color: "#86efac", fontSize: "0.82rem", fontWeight: 600, textAlign: "center" }}>
-                                ✔ Completed — Send a new request to participate again
-                              </div>
-                            )}
-
-                            {/* Fresh or Rejected: show Select / Re-request button */}
-                            {(canSelect || isCompleted) && (
-                              <button
-                                type="button"
-                                className="participant-proof-btn participant-mini-action"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  toggleProductSelection(item.selection_key);
-                                }}
-                              >
-                                {isSelected ? "✓ Selected" : isCompleted ? "Request Again" : isRejected ? "Send New Request" : "Select Product"}
-                              </button>
-                            )}
-                          </div>
-                        </article>
-                      );
-                    })
-                  ) : (
-                    <div className="participant-empty-card">No products available for this search right now.</div>
+            {showNotifPanel && (
+              <div className="nd-notif-panel">
+                <div className="nd-notif-panel-head">
+                  <span>Notifications</span>
+                  {notifBell.length > 0 && (
+                    <button type="button" className="nd-notif-clear" onClick={dismissAllNotifications}>
+                      Mark all read
+                    </button>
                   )}
                 </div>
+                {notifBell.length === 0 ? (
+                  <div className="nd-notif-empty">All caught up! 🎉</div>
+                ) : (
+                  <ul className="nd-notif-list">
+                    {notifBell.map((n) => {
+                      const isApproved = String(n.type || "").toUpperCase().includes("APPROVED");
+                      const isRejected = String(n.type || "").toUpperCase().includes("REJECTED");
+                      return (
+                        <li key={n.id} className="nd-notif-item">
+                          <span
+                            className="nd-notif-dot-color"
+                            data-type={isApproved ? "approved" : isRejected ? "rejected" : "info"}
+                          />
+                          <div className="nd-notif-text">
+                            {n.title && <strong>{n.title}</strong>}
+                            <p>{n.message || n.title}</p>
+                            <small>{formatDateTime(n.created_at)}</small>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
-            </>
-          )}
+            )}
+          </div>
+
+          <button type="button" className="nd-logout" onClick={handleLogout}>Logout</button>
+        </div>
+      </header>
+
+      {/* ══ MAIN ══ */}
+      <main className="nd-main">
+
+        {/* ── Hero ── */}
+        <section className="nd-hero">
+          <div className="nd-hero-left">
+            <h1 className="nd-hero-title">
+              {isFirstVisit ? `Welcome, ${displayName}!` : `Welcome back, ${displayName}!`}
+            </h1>
+            <p className="nd-hero-sub">
+              {activeTabCount > 0
+                ? `You have ${activeTabCount} active project${activeTabCount !== 1 ? "s" : ""} in progress.`
+                : "Browse products below and select ones you'd like to review."}
+            </p>
+          </div>
+
+          <div className="nd-hero-stats">
+            <div className="nd-stat-card">
+              <span className="nd-stat-num">{activeTabCount}</span>
+              <span className="nd-stat-label">Active</span>
+            </div>
+            <div className="nd-stat-card">
+              <span className="nd-stat-num">{appliedRows.length}</span>
+              <span className="nd-stat-label">Applied</span>
+            </div>
+            <div className="nd-stat-card">
+              <span className="nd-stat-num">{completedProjects.length}</span>
+              <span className="nd-stat-label">Done</span>
+            </div>
+          </div>
+
+          <div className="nd-hero-profile">
+            <div className="nd-profile-head">
+              <span>Profile Completion</span>
+              <strong className={profileCompletion === 100 ? "nd-pct--full" : ""}>{profileCompletion}%</strong>
+            </div>
+            <div className="nd-progress-bar">
+              <div className="nd-progress-fill" style={{ width: `${Math.max(0, Math.min(100, profileCompletion))}%` }} />
+            </div>
+            {profileCompletion < 100 && (
+              <button
+                type="button"
+                className="nd-profile-cta"
+                onClick={() => { addToast("Opening your profile to complete it…", "info"); navigate(path("profile")); }}
+              >
+                Complete Profile →
+              </button>
+            )}
+          </div>
         </section>
+
+        {/* ── Tab bar ── */}
+        <div className="nd-tab-bar">
+          <div className="nd-tabs" role="tablist">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.key}
+                className={`nd-tab ${activeTab === tab.key ? "nd-tab--active" : ""}`}
+                onClick={() => handleTabChange(tab.key)}
+              >
+                {tab.label}
+                {tab.count > 0 && <span className="nd-tab-count">{tab.count}</span>}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === "catalog" && (
+            <div className="nd-filter-row">
+              <label htmlFor="nd-brand-filter" className="nd-filter-label">Brand:</label>
+              <select
+                id="nd-brand-filter"
+                className="nd-filter-select"
+                value={clientFilter}
+                onChange={(e) => {
+                  setClientFilter(e.target.value);
+                  addToast(e.target.value === "ALL" ? "Showing all brands." : `Filtered by ${e.target.value}.`, "info");
+                }}
+              >
+                <option value="ALL">All Brands</option>
+                {clientFilterOptions.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+              <span className="nd-filter-count">
+                {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* ══ TAB: Browse Products ══ */}
+        {activeTab === "catalog" && (
+          <div className="nd-tab-content">
+            {filteredProducts.length === 0 ? (
+              <EmptyState
+                icon="📦"
+                title="No products available"
+                subtitle="New campaigns are added regularly. Check back soon!"
+              />
+            ) : (
+              <div className="nd-product-grid">
+                {filteredProducts.map((item) => {
+                  const latestApp = getLatestProductApplication(appliedProjects, item.id);
+                  return (
+                    <ProductCard
+                      key={item.selection_key}
+                      item={item}
+                      isSelected={selectedProductKeys.includes(item.selection_key)}
+                      latestApplication={latestApp}
+                      addToast={addToast}
+                      onSelect={(key) => setSelectedProductKeys((prev) =>
+                        prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+                      )}
+                      onNavigate={(allocId) => {
+                        if (allocId) navigate(`${path("allocation/active")}?allocation=${allocId}`);
+                        else navigate(path("allocation/active"));
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ TAB: Approved ══ */}
+        {activeTab === "approved" && (
+          <div className="nd-tab-content">
+            {approvedRows.length === 0 ? (
+              <EmptyState
+                icon="✅"
+                title="No approved requests yet"
+                subtitle="Once admin approves your product requests, they appear here with action steps."
+              />
+            ) : (
+              <div className="nd-list-cards">
+                {approvedRows.map((row) => (
+                  <div key={row.id} className="nd-list-card nd-list-card--approved">
+                    <div className="nd-list-card-icon">✓</div>
+                    <div className="nd-list-card-body">
+                      <h4>{row.productName}</h4>
+                      <span className="nd-list-card-project">{row.projectTitle}</span>
+                      <span className="nd-list-card-date">Approved {formatDateTime(row.requestedAt)}</span>
+                    </div>
+                    <StatusBadge status={row.allocationStatus || "APPROVED"} />
+                    <div className="nd-list-card-action">
+                      {row.allocationId ? (
+                        <button
+                          type="button"
+                          className="nd-btn nd-btn--task"
+                          onClick={() => {
+                            addToast("Opening your task — submit your invoice and review there.", "info");
+                            navigate(`${path("allocation/active")}?allocation=${row.allocationId}`);
+                          }}
+                        >
+                          Submit Invoice & Review →
+                        </button>
+                      ) : (
+                        <span className="nd-chip nd-chip--waiting">⏳ Allocation Pending</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ TAB: Applied ══ */}
+        {activeTab === "applied" && (
+          <div className="nd-tab-content">
+            {appliedRows.length === 0 ? (
+              <EmptyState
+                icon="📋"
+                title="No pending applications"
+                subtitle="Select products from Browse and send a request — they'll appear here while admin reviews."
+              />
+            ) : (
+              <div className="nd-list-cards">
+                {appliedRows.map((item) => {
+                  const status = String(item?.status || "").toUpperCase();
+                  return (
+                    <div
+                      key={item.id}
+                      className={`nd-list-card nd-list-card--${status === "REJECTED" ? "rejected" : "pending"}`}
+                    >
+                      <div className="nd-list-card-icon">{status === "REJECTED" ? "✕" : "⏳"}</div>
+                      <div className="nd-list-card-body">
+                        <h4>{item?.project_products?.name || "—"}</h4>
+                        <span className="nd-list-card-project">{item?.projects?.title || "—"}</span>
+                        <span className="nd-list-card-date">Applied {formatDateTime(item?.created_at)}</span>
+                      </div>
+                      <StatusBadge status={status} />
+                      <div className="nd-list-card-action">
+                        {status === "REJECTED" ? (
+                          <button
+                            type="button"
+                            className="nd-btn nd-btn--select"
+                            onClick={() => {
+                              handleTabChange("catalog");
+                              addToast("Showing Browse tab — find the product to request again.", "info");
+                            }}
+                          >
+                            Request Again
+                          </button>
+                        ) : (
+                          <span className="nd-chip nd-chip--waiting">Awaiting Review</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ TAB: Completed ══ */}
+        {activeTab === "completed" && (
+          <div className="nd-tab-content">
+            {completedProjects.length === 0 ? (
+              <EmptyState
+                icon="🏆"
+                title="No completed campaigns yet"
+                subtitle="Complete your tasks and reviews — finished campaigns show up here."
+              />
+            ) : (
+              <div className="nd-list-cards">
+                {completedProjects.map((item) => (
+                  <div key={item.id} className="nd-list-card nd-list-card--completed">
+                    <div className="nd-list-card-icon">★</div>
+                    <div className="nd-list-card-body">
+                      <h4>{item?.project_products?.name || "—"}</h4>
+                      <span className="nd-list-card-project">{item?.projects?.title || "—"}</span>
+                      <span className="nd-list-card-date">
+                        Completed {formatDateTime(item?.completed_at || item?.reviewed_at)}
+                      </span>
+                    </div>
+                    <StatusBadge status="COMPLETED" />
+                    <div className="nd-list-card-action">
+                      {item?.projects?.reward ? (
+                        <span className="nd-chip nd-chip--reward">
+                          🎁 {formatInr(item.projects.reward)} earned
+                        </span>
+                      ) : (
+                        <span className="nd-chip nd-chip--done">Campaign complete</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
       </main>
 
-      {allocationView === "allocation" && dashboardProducts.length ? (
-        <div className="participant-bottom-bar">
-          <div>
-            <strong>{selectableSelectedProducts.length} product(s) selected</strong>
-            <small>Review your selection and send it to admin for approval.</small>
+      {/* ── Fixed selection bar ── */}
+      {activeTab === "catalog" && selectedProducts.length > 0 && (
+        <div className="nd-selection-bar">
+          <div className="nd-selection-info">
+            <span className="nd-selection-count">{selectedProducts.length}</span>
+            <div>
+              <strong>{selectedProducts.length} product{selectedProducts.length !== 1 ? "s" : ""} selected</strong>
+              <small>Ready to send for admin approval</small>
+            </div>
           </div>
-          <button type="button" className="participant-bottom-bar-btn" disabled={!selectableSelectedProducts.length || sendingProductRequest} onClick={sendSelectedProductsToAdmin}>
-            {sendingProductRequest ? "Sending..." : "Send Request to Admin"}
-          </button>
+          <div className="nd-selection-actions">
+            <button
+              type="button"
+              className="nd-btn nd-btn--ghost"
+              onClick={() => { setSelectedProductKeys([]); addToast("Selection cleared.", "info"); }}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              className="nd-btn nd-btn--send"
+              disabled={sendingRequest}
+              onClick={sendRequest}
+            >
+              {sendingRequest ? "Sending…" : "Send Request to Admin →"}
+            </button>
+          </div>
         </div>
-      ) : null}
+      )}
 
-      <nav className="participant-mobile-nav" aria-label="Participant mobile navigation">
-        <button type="button" className="active" onClick={() => navigate(participantDashboardPath)}>Home</button>
-        <button type="button" onClick={() => navigate(participantAllocationPath)}>Tasks</button>
-        <button type="button" onClick={() => navigate(participantPayoutPath)}>Payouts</button>
+      {/* ── Mobile nav ── */}
+      <nav className="nd-mobile-nav" aria-label="Mobile navigation">
+        <button type="button" className="nd-mobile-btn nd-mobile-btn--active" onClick={() => navigate(path("dashboard"))}>
+          <span>🏠</span><span>Home</span>
+        </button>
+        <button type="button" className="nd-mobile-btn" onClick={() => navigate(path("allocation/active"))}>
+          <span>📋</span><span>Tasks</span>
+        </button>
+        <button type="button" className="nd-mobile-btn" onClick={() => navigate(path("payouts"))}>
+          <span>💰</span><span>Payouts</span>
+        </button>
+        <button type="button" className="nd-mobile-btn" onClick={() => navigate(path("profile"))}>
+          <span>👤</span><span>Profile</span>
+        </button>
       </nav>
     </div>
   );
 };
 
 export default ParticipantDashboard;
+
