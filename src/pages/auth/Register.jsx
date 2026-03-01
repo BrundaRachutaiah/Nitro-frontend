@@ -139,16 +139,28 @@ const Register = () => {
           terms_accepted: false, terms_accepted_at: null,
         },
       });
-      setSuccess("Account created! Check your email to verify, then await admin approval. Redirecting…");
-      setTimeout(() => navigate("/login/participant", { replace: true }), 2500);
+      setSuccess("✅ Account created! A verification email has been sent to " + email.trim() + ". Please verify your email, then wait for admin approval before signing in.");
+      setTimeout(() => navigate("/login/participant", { replace: true }), 4000);
     } catch (err) {
       const raw = String(err?.message || "");
       const low = raw.toLowerCase();
       if (err?.status === 429 || low.includes("rate limit")) {
         const w = Number(err?.retryAfter) > 0 ? Number(err.retryAfter) : 60;
-        setCooldown(w); setError(`Too many attempts. Wait ${w}s before trying again.`);
-      } else if (low.includes("already registered") || low.includes("already been registered")) {
-        setError("This email is already registered. Sign in instead.");
+        setCooldown(w); setError("Too many sign-up attempts. Please wait " + w + " seconds before trying again.");
+      } else if (
+        err?.code === "email_already_registered" ||
+        err?.status === 409 ||
+        low.includes("already registered") ||
+        low.includes("already been registered") ||
+        low.includes("user already registered") ||
+        low.includes("email already") ||
+        (low.includes("invalid") && low.includes("email"))
+      ) {
+        // Supabase returns 200 with identities=[] for duplicate emails,
+        // but can also leak "invalid email" message — both mean already registered.
+        setError("This email address is already registered. Please sign in instead, or use a different email.");
+      } else if (low.includes("password") && (low.includes("weak") || low.includes("strength"))) {
+        setError("Your password is too weak. Use at least 8 characters with a mix of letters, numbers and symbols.");
       } else {
         setError(raw || "Unable to register. Please try again.");
       }
@@ -202,9 +214,10 @@ const Register = () => {
         .rg-divider{display:flex;align-items:center;gap:.75rem;margin-bottom:1.35rem;}
         .rg-div-line{flex:1;height:1px;background:rgba(255,255,255,.08);}
         .rg-div-txt{font-size:.75rem;color:rgba(255,255,255,.25);font-weight:300;white-space:nowrap;}
-        .rg-alert{border-radius:10px;padding:.7rem 1rem;font-size:.845rem;margin-bottom:1.25rem;animation:rgU .3s ease both;}
-        .rg-err{background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.25);color:#ff8080;}
-        .rg-ok{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.25);color:#00e5a0;}
+        .rg-alert{border-radius:12px;padding:.85rem 1rem;font-size:.85rem;margin-bottom:1.25rem;animation:rgU .3s ease both;display:flex;align-items:flex-start;gap:.6rem;line-height:1.45;}
+        .rg-err{background:rgba(255,80,80,.12);border:1px solid rgba(255,80,80,.35);color:#ff8080;}
+        .rg-ok{background:rgba(0,229,160,.12);border:1px solid rgba(0,229,160,.35);color:#00e5a0;padding:1rem 1.1rem;font-size:.9rem;font-weight:500;}
+        .rg-ok-icon{font-size:1.2rem;flex-shrink:0;margin-top:.05rem;}
         .rg-fg{margin-bottom:1.1rem;}
         .rg-fg-last{margin-bottom:1.5rem;}
         .rg-lbl{display:block;font-size:.8rem;font-weight:500;color:rgba(255,255,255,.52);margin-bottom:.42rem;letter-spacing:.02em;}
@@ -279,8 +292,21 @@ const Register = () => {
               </div>
             </div>
 
-            {error   && <div className="rg-alert rg-err">{error}</div>}
-            {success && <div className="rg-alert rg-ok">{success}</div>}
+            {error && (
+              <div className="rg-alert rg-err" role="alert">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,marginTop:"2px"}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span>{error}</span>
+              </div>
+            )}
+            {success && (
+              <div className="rg-alert rg-ok" role="status">
+                <span className="rg-ok-icon">📧</span>
+                <div>
+                  <div style={{fontWeight:700,marginBottom:".25rem"}}>Verify your email</div>
+                  <div style={{fontWeight:400,fontSize:".82rem",opacity:.85}}>{success}</div>
+                </div>
+              </div>
+            )}
 
             {/* ── STEP 1 ── */}
             <div className={`rg-sc ${step === 1 ? "active" : ""}`}>

@@ -119,7 +119,45 @@ const signUpWithSupabase = async ({ email, password, fullName, phone, registrati
     })
   });
 
-  return parseResponse(response);
+  // Supabase returns 200 even for duplicate emails — detect it here
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const details = [
+      data?.message,
+      data?.msg,
+      data?.error_description,
+      data?.error,
+      data?.weak_password?.message
+    ].filter(Boolean);
+
+    const reason = details[0] || `Request failed (${response.status})`;
+    const error = new Error(reason);
+    error.status = response.status;
+
+    const retryAfterHeader = response.headers.get("retry-after");
+    const retryAfter = Number(retryAfterHeader);
+    if (Number.isFinite(retryAfter) && retryAfter > 0) {
+      error.retryAfter = retryAfter;
+    }
+
+    throw error;
+  }
+
+  // Supabase returns 200 with identities=[] when email already exists
+  // It also sometimes returns an obfuscated user with no identity attached
+  if (
+    data?.id &&
+    Array.isArray(data?.identities) &&
+    data.identities.length === 0
+  ) {
+    const error = new Error("This email is already registered. Please sign in instead.");
+    error.status = 409;
+    error.code = "email_already_registered";
+    throw error;
+  }
+
+  return data;
 };
 
 const resendSignupConfirmation = async (email) => {
