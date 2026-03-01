@@ -30,6 +30,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [projects, setProjects] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
@@ -52,9 +53,14 @@ const Dashboard = () => {
           return;
         }
 
-        const projectsRes = await fetchJson("/projects", token, controller.signal);
+        const [projectsRes, summaryRes] = await Promise.all([
+          fetchJson("/projects", token, controller.signal),
+          fetchJson("/admin/dashboard/summary", token, controller.signal)
+        ]);
+        
         setUser(me);
         setProjects(Array.isArray(projectsRes?.data) ? projectsRes.data : []);
+        setSummary(summaryRes?.data || null);
       } catch (err) {
         if (controller.signal.aborted) return;
         if (/token|unauthorized|expired|forbidden/i.test(err.message)) {
@@ -91,16 +97,14 @@ const Dashboard = () => {
   const cards = useMemo(() => {
     const publishedCount = projects.filter((p) => String(p?.status || "").toUpperCase() === "PUBLISHED").length;
     const draftCount = projects.filter((p) => String(p?.status || "").toUpperCase() === "DRAFT").length;
-    const d2cCount = projects.filter((p) => String(p?.mode || "").toUpperCase() === "D2C").length;
-    const marketplaceCount = projects.filter((p) => String(p?.mode || "").toUpperCase() === "MARKETPLACE").length;
-
+    
     return [
       { title: "My Projects", value: myProjects.length, note: "Created by you" },
-      { title: "All Projects", value: projects.length, note: "Across platform" },
-      { title: "Published", value: publishedCount, note: `${draftCount} drafts` },
-      { title: "Modes", value: d2cCount + marketplaceCount, note: `${marketplaceCount} marketplace / ${d2cCount} d2c` }
+      { title: "Eligible Payouts", value: summary?.payouts_eligible || 0, note: "Not in batch" },
+      { title: "Pending Proofs", value: summary?.purchase_proofs_pending || 0, note: "Need review" },
+      { title: "Published", value: publishedCount, note: `${draftCount} drafts` }
     ];
-  }, [myProjects.length, projects]);
+  }, [myProjects.length, projects, summary]);
 
   const handleLogout = async () => {
     const token = getStoredToken();

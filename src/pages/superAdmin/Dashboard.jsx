@@ -9,6 +9,7 @@ import {
 } from "../../lib/auth";
 import "./Dashboard.css";
 
+
 /* ─── Formatters ─────────────────────────────────────────────── */
 const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat("en-US");
@@ -31,6 +32,7 @@ const timeAgo = (value) => {
   return "Just now";
 };
 
+
 /* ─── Fetch ──────────────────────────────────────────────────── */
 const fetchJson = async (path, token, signal) => {
   const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal });
@@ -38,6 +40,7 @@ const fetchJson = async (path, token, signal) => {
   if (!res.ok) throw new Error(data?.message || "Request failed");
   return data;
 };
+
 
 /* ─── SVG Icons ──────────────────────────────────────────────── */
 const Icon = ({ name, size = 18 }) => {
@@ -65,6 +68,7 @@ const Icon = ({ name, size = 18 }) => {
   return icons[name] || <svg {...p}><circle cx="12" cy="12" r="9"/></svg>;
 };
 
+
 /* ─── Stat Card ──────────────────────────────────────────────── */
 const StatCard = ({ title, value, note, icon, tone, onClick, delay = 0 }) => (
   <article
@@ -85,6 +89,7 @@ const StatCard = ({ title, value, note, icon, tone, onClick, delay = 0 }) => (
   </article>
 );
 
+
 /* ─── Activity Item ──────────────────────────────────────────── */
 const ActivityItem = ({ item }) => {
   const isApproved = /approved/i.test(item.action || "");
@@ -101,6 +106,7 @@ const ActivityItem = ({ item }) => {
     </div>
   );
 };
+
 
 /* ═══════════════════════════════════════════════════════════════
    MAIN DASHBOARD
@@ -126,6 +132,7 @@ const Dashboard = () => {
   const [isExporting, setIsExporting] = useState(false);
   const datePickerRef = useRef(null);
 
+
   const navItems = useMemo(() => [
     { key: "dashboard",    label: "Dashboard",      icon: "dashboard",    path: "/dashboard" },
     { key: "participants", label: "Participants",    icon: "participants", path: "/super-admin/users" },
@@ -138,6 +145,7 @@ const Dashboard = () => {
     { key: "support",      label: "Support",         icon: "support",      path: "/super-admin/support" },
   ], []);
 
+
   const dateQuery = useMemo(() => {
     const p = new URLSearchParams();
     if (dateFilter.preset === "custom") {
@@ -147,6 +155,7 @@ const Dashboard = () => {
     return p.toString();
   }, [dateFilter]);
 
+
   const dateFilterLabel = useMemo(() => {
     const labels = { today: "Today", yesterday: "Yesterday", last7days: "Last 7 days", last30days: "Last 30 days" };
     if (dateFilter.preset !== "custom") return labels[dateFilter.preset] || "Last 30 days";
@@ -154,10 +163,12 @@ const Dashboard = () => {
     return "Custom Range";
   }, [dateFilter]);
 
+
   useEffect(() => {
     const token = getStoredToken();
     if (!token) { navigate("/login", { replace: true }); return; }
     const ctrl = new AbortController();
+
 
     (async () => {
       setLoading(true); setError("");
@@ -167,14 +178,16 @@ const Dashboard = () => {
         if (role !== "ADMIN" && role !== "SUPER_ADMIN") { setUser(bu); setError("Admin access only."); return; }
         setUser(bu);
 
+
         const [sumRes, actRes, appRes, projRes, perfRes, supRes] = await Promise.all([
           fetchJson(`/admin/dashboard/summary?${dateQuery}`, token, ctrl.signal),
-          fetchJson("/admin/activity?limit=5", token, ctrl.signal),
+          fetchJson("/admin/activity?limit=3", token, ctrl.signal),
           fetchJson("/admin/approvals/count", token, ctrl.signal),
           fetchJson("/projects", token, ctrl.signal),
           fetchJson(`/admin/dashboard/project-performance?${dateQuery}`, token, ctrl.signal),
           fetchJson("/admin/analytics/support", token, ctrl.signal),
         ]);
+
 
         setSummary(sumRes?.data || {});
         setActivity(actRes?.data || []);
@@ -193,6 +206,7 @@ const Dashboard = () => {
     return () => ctrl.abort();
   }, [dateQuery, navigate]);
 
+
   useEffect(() => {
     const token = getStoredToken();
     if (!token || !searchTerm.trim()) { setSearchResults(null); return; }
@@ -206,12 +220,14 @@ const Dashboard = () => {
     return () => { ctrl.abort(); clearTimeout(t); };
   }, [searchTerm]);
 
+
   /* Close date picker on outside click */
   useEffect(() => {
     const handler = (e) => { if (datePickerRef.current && !datePickerRef.current.contains(e.target)) setIsDatePickerOpen(false); };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
 
   const handleLogout = async () => {
     const token = getStoredToken();
@@ -220,11 +236,13 @@ const Dashboard = () => {
     navigate("/login", { replace: true });
   };
 
+
   const handleNavClick = (item) => {
     setActiveNav(item.key);
     setIsSidebarOpen(false);
     if (item.path) navigate(item.path);
   };
+
 
   const handleExport = async () => {
     const token = getStoredToken();
@@ -244,7 +262,9 @@ const Dashboard = () => {
     finally { setIsExporting(false); }
   };
 
+
   const totalApprovals = toNum(approvalCounts?.participants) + toNum(approvalCounts?.product_applications) + toNum(approvalCounts?.purchase_proofs) + toNum(approvalCounts?.review_submissions);
+
 
   const cards = useMemo(() => [
     { title: "Total Participants", value: fmtVal(summary?.participants_total), note: "Active users", icon: "participants", tone: "blue", path: "/super-admin/users" },
@@ -253,7 +273,9 @@ const Dashboard = () => {
       note: `${toNum(approvalCounts?.participants)} logins · ${toNum(approvalCounts?.product_applications)} products · ${toNum(approvalCounts?.purchase_proofs)+toNum(approvalCounts?.review_submissions)} reviews`,
       icon: "approvals", tone: totalApprovals > 0 ? "amber" : "blue", path: "/admin/applications" },
     { title: "Pending Payouts",    value: fmtVal(summary?.payouts_pending),    note: "Batches queued", icon: "payouts",      tone: "green", path: "/admin/payouts" },
+    { title: "Eligible Payouts",   value: fmtVal(summary?.payouts_eligible || 0), note: "Not yet in batch", icon: "payouts", tone: "cyan", path: "/admin/payouts" },
   ], [summary, approvalCounts, totalApprovals]);
+
 
   /* ─── Chart model ─── */
   const chart = useMemo(() => {
@@ -276,6 +298,7 @@ const Dashboard = () => {
       totals:{apps:appTotal, proofs:proofTotal}, conv:appTotal>0?Math.round((proofTotal/appTotal)*100):0 };
   }, [projectPerformance]);
 
+
   if (loading) {
     return (
       <div className="sa-loading">
@@ -285,6 +308,7 @@ const Dashboard = () => {
       </div>
     );
   }
+
 
   return (
     <div className="sa-dashboard">
@@ -296,6 +320,7 @@ const Dashboard = () => {
         <div className="sa-brand">
           <span className="sa-brand-n">N</span>ITRO
         </div>
+
 
         <div className="sa-search-wrap">
           <span className="sa-search-icon"><Icon name="search" size={16} /></span>
@@ -324,6 +349,7 @@ const Dashboard = () => {
           )}
         </div>
 
+
         <div className="sa-topbar-right">
           {totalApprovals > 0 && (
             <button type="button" className="sa-alert-btn" onClick={() => navigate("/admin/applications")}>
@@ -343,6 +369,7 @@ const Dashboard = () => {
           <button type="button" className="sa-logout" onClick={handleLogout}>Logout</button>
         </div>
       </header>
+
 
       <div className="sa-layout">
         {/* ══ SIDEBAR ══ */}
@@ -375,8 +402,10 @@ const Dashboard = () => {
           </button>
         </aside>
 
+
         {/* ══ MAIN CONTENT ══ */}
         <main className="sa-main">
+
 
           {/* ── Page header ── */}
           <div className="sa-page-head">
@@ -445,6 +474,7 @@ const Dashboard = () => {
             </div>
           </div>
 
+
           {/* Error */}
           {error && (
             <div className="sa-error">
@@ -453,6 +483,7 @@ const Dashboard = () => {
             </div>
           )}
 
+
           {/* ── Stat cards ── */}
           <div className="sa-cards">
             {cards.map((card, i) => (
@@ -460,8 +491,10 @@ const Dashboard = () => {
             ))}
           </div>
 
+
           {/* ── Chart + Activity ── */}
           <div className="sa-panels">
+
 
             {/* Chart */}
             <div className="sa-panel sa-panel--chart">
@@ -471,6 +504,7 @@ const Dashboard = () => {
                   <p className="sa-panel-sub">Applications vs purchase proofs over time</p>
                 </div>
               </div>
+
 
               {chart.hasData ? (
                 <>
@@ -489,6 +523,7 @@ const Dashboard = () => {
                       </div>
                     ))}
                   </div>
+
 
                   <svg viewBox="0 0 600 228" className="sa-chart" aria-label="Performance chart">
                     <defs>
@@ -546,6 +581,7 @@ const Dashboard = () => {
               )}
             </div>
 
+
             {/* Activity */}
             <div className="sa-panel sa-panel--activity">
               <div className="sa-panel-head">
@@ -556,19 +592,22 @@ const Dashboard = () => {
                 <Icon name="activity" size={18} />
               </div>
 
+
               <div className="sa-activity-list">
                 {activity.length ? (
-                  activity.slice(0, 5).map(item => <ActivityItem key={item.id} item={item} />)
+                  activity.slice(0, 3).map(item => <ActivityItem key={item.id} item={item} />)
                 ) : (
                   <div className="sa-activity-empty">No recent activity.</div>
                 )}
               </div>
+
 
               <button type="button" className="sa-view-all-btn" onClick={() => navigate("/super-admin/logs")}>
                 View all activity <Icon name="arrow" size={14} />
               </button>
             </div>
           </div>
+
 
           {/* ── Projects table ── */}
           <div className="sa-panel sa-panel--table">
@@ -581,6 +620,7 @@ const Dashboard = () => {
                 View all <Icon name="arrow" size={14} />
               </button>
             </div>
+
 
             <div className="sa-table-wrap">
               <table className="sa-table">
@@ -612,6 +652,7 @@ const Dashboard = () => {
             </div>
           </div>
 
+
           {/* ── Support + Quick links ── */}
           <div className="sa-bottom-row">
             <div className="sa-panel sa-panel--support">
@@ -639,6 +680,7 @@ const Dashboard = () => {
               )}
             </div>
 
+
             <div className="sa-panel sa-panel--quicklinks">
               <div className="sa-panel-head">
                 <div>
@@ -663,10 +705,13 @@ const Dashboard = () => {
             </div>
           </div>
 
+
         </main>
       </div>
     </div>
   );
 };
 
+
 export default Dashboard;
+

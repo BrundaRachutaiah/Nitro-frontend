@@ -452,7 +452,9 @@ const Payouts = () => {
         seen.set(pid, {
           ...p,
           products: p.product_name ? [p.product_name] : [],
-          total_amount: Number(p.product_amount || p.amount || 0),
+          product_amount_total: Number(p.product_amount || 0),
+          reward_amount_total: Number(p.reward_amount || 0),
+          total_amount: Number(p.total_amount || p.amount || 0),
           payout_ids: p.payout_id ? [p.payout_id] : [],
           all_paid: p.payout_status === "PAID",
         });
@@ -460,7 +462,9 @@ const Payouts = () => {
       } else {
         const g = seen.get(pid);
         if (p.product_name && !g.products.includes(p.product_name)) g.products.push(p.product_name);
-        g.total_amount += Number(p.product_amount || p.amount || 0);
+        g.product_amount_total += Number(p.product_amount || 0);
+        g.reward_amount_total += Number(p.reward_amount || 0);
+        g.total_amount += Number(p.total_amount || p.amount || 0);
         if (p.payout_id && !g.payout_ids.includes(p.payout_id)) g.payout_ids.push(p.payout_id);
         if (p.payout_status !== "PAID") g.all_paid = false;
       }
@@ -771,9 +775,12 @@ const Payouts = () => {
                                       ))}
                                     </ol>
                                   )}
+                                  <div style={{ fontSize: 11, color: "#6a8aaa", marginTop: 4 }}>
+                                    Reward: {fmt(g.reward_amount_total)} | Product: {fmt(g.product_amount_total)}
+                                  </div>
                                 </td>
                                 <td style={{ ...S.td, textAlign: "right", ...S.amountCell }}>
-                                  {g.total_amount > 0 ? fmt(g.total_amount) : "—"}
+                                  {g.total_amount > 0 ? fmt(g.total_amount) : fmt(g.amount)}
                                 </td>
                                 <td style={{ ...S.td, fontFamily: "monospace", fontSize: 12 }}>
                                   {g.bank_account_number || "—"}

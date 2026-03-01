@@ -4,7 +4,9 @@
    Palette: Deep navy · Indigo accent · Cyan highlights
 ══════════════════════════════════════════════════════════════ */
 
+
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Outfit:wght@400;500;600&display=swap');
+
 
 /* ── Variables ── */
 :root {
@@ -39,8 +41,10 @@
   --shadow-lg:    0 12px 48px rgba(0,0,0,0.6);
 }
 
+
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
 
 /* ── Dashboard root ── */
 .sa-dashboard {
@@ -51,6 +55,7 @@
   display: flex;
   flex-direction: column;
 }
+
 
 /* ── Loading ── */
 .sa-loading {
@@ -72,6 +77,7 @@
   animation: spin 0.75s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
 
 /* ══════════════════════════════════════════
    TOPBAR
@@ -103,6 +109,7 @@
 }
 .sa-brand-n { color: var(--accent); }
 
+
 /* Search */
 .sa-search-wrap {
   flex: 1; max-width: 480px; position: relative;
@@ -132,6 +139,7 @@
 .sa-search-cat { font-size: 0.7rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; margin: 4px 0 4px; }
 .sa-search-item { font-size: 0.875rem; color: var(--text-2); padding: 5px 8px; border-radius: 6px; cursor: pointer; }
 .sa-search-item:hover { background: var(--bg-4); color: var(--text); }
+
 
 /* Topbar right */
 .sa-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
@@ -163,6 +171,7 @@
 }
 .sa-logout:hover { border-color: var(--danger); color: #fca5a5; }
 
+
 /* ══════════════════════════════════════════
    LAYOUT
 ══════════════════════════════════════════ */
@@ -176,6 +185,7 @@
   position: fixed; inset: 0; z-index: 90;
   background: rgba(0,0,0,0.6); border: none;
 }
+
 
 /* ══════════════════════════════════════════
    SIDEBAR
@@ -220,6 +230,7 @@
 }
 .sa-new-project-btn:hover { filter: brightness(1.12); }
 
+
 /* ══════════════════════════════════════════
    MAIN
 ══════════════════════════════════════════ */
@@ -228,6 +239,7 @@
   min-width: 0;
   display: flex; flex-direction: column; gap: 1.25rem;
 }
+
 
 /* ── Page header ── */
 .sa-page-head {
@@ -243,6 +255,7 @@
 .sa-highlight { color: var(--accent); }
 .sa-page-sub { font-size: 0.875rem; color: var(--text-3); margin-top: 4px; }
 .sa-page-actions { display: flex; align-items: center; gap: 10px; }
+
 
 /* Date picker */
 .sa-date-wrap { position: relative; }
@@ -298,6 +311,7 @@
 }
 .sa-date-apply:hover { filter: brightness(1.1); }
 
+
 /* Export button */
 .sa-export-btn {
   display: flex; align-items: center; gap: 7px;
@@ -310,6 +324,7 @@
 .sa-export-btn:hover { background: var(--bg-4); color: var(--text); }
 .sa-export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+
 /* Error */
 .sa-error {
   display: flex; align-items: center; gap: 10px;
@@ -318,6 +333,7 @@
   font-size: 0.875rem;
 }
 .sa-error button { margin-left: auto; background: none; border: none; color: inherit; cursor: pointer; }
+
 
 /* ══════════════════════════════════════════
    STAT CARDS
@@ -376,6 +392,7 @@
   color: var(--text);
 }
 
+
 /* ══════════════════════════════════════════
    PANELS
 ══════════════════════════════════════════ */
@@ -399,6 +416,7 @@
   grid-template-columns: 1fr 340px;
   gap: 1.25rem;
 }
+
 
 /* Chart panel */
 .sa-panel--chart { min-height: 380px; }
@@ -424,6 +442,7 @@
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 10px; padding: 48px; text-align: center; color: var(--text-3);
 }
+
 
 /* Activity panel */
 .sa-panel--activity { display: flex; flex-direction: column; }
@@ -455,6 +474,7 @@
 }
 .sa-view-all-btn:hover { background: var(--bg-4); color: var(--text); }
 
+
 /* ══════════════════════════════════════════
    TABLE
 ══════════════════════════════════════════ */
@@ -480,6 +500,7 @@
 .sa-td-muted { color: var(--text-3) !important; }
 .sa-td-empty { text-align: center; color: var(--text-3); padding: 32px !important; }
 
+
 /* Status/Mode badges */
 .sa-status-badge {
   display: inline-block; padding: 3px 10px; border-radius: 999px;
@@ -492,6 +513,11 @@
 }
 .sa-mode-badge--d2c         { background: var(--accent-dim); color: #a5b4fc; }
 .sa-mode-badge--marketplace  { background: var(--cyan-dim);   color: #67e8f9; }
+.sa-mode-badge--draft        { background: rgba(100,116,139,0.15); color: #94a3b8; }
+.sa-mode-badge--archived     { background: rgba(239,68,68,0.1); color: #fca5a5; }
+.sa-status-badge--draft      { background: rgba(100,116,139,0.15); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
+.sa-status-badge--archived   { background: rgba(239,68,68,0.1); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+
 
 /* Link button */
 .sa-link-btn {
@@ -502,6 +528,7 @@
 }
 .sa-link-btn:hover { opacity: 0.75; }
 
+
 /* ══════════════════════════════════════════
    BOTTOM ROW
 ══════════════════════════════════════════ */
@@ -510,6 +537,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 1.25rem;
 }
+
 
 /* Support */
 .sa-support-stats {
@@ -529,6 +557,7 @@
 .sa-support-stat--open  .sa-support-num { color: var(--amber); }
 .sa-support-stat--closed .sa-support-num { color: var(--green); }
 .sa-support-label { display: block; font-size: 0.78rem; color: var(--text-3); margin-top: 4px; }
+
 
 /* Quick actions */
 .sa-quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -554,6 +583,7 @@
 }
 .sa-muted { color: var(--text-3); font-size: 0.875rem; }
 
+
 /* ══════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════ */
@@ -561,6 +591,7 @@
   :root { --sidebar-w: 210px; }
   .sa-panels { grid-template-columns: 1fr 300px; }
 }
+
 
 @media (max-width: 1024px) {
   .sa-layout { grid-template-columns: 1fr; }
@@ -578,6 +609,7 @@
   .sa-user-info { display: none; }
 }
 
+
 @media (max-width: 640px) {
   .sa-main { padding: 1rem; gap: 1rem; }
   .sa-cards { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
@@ -588,9 +620,9 @@
   .sa-quick-grid { grid-template-columns: 1fr; }
 }
 
+
 @media (max-width: 480px) {
   .sa-cards { grid-template-columns: 1fr; }
   .sa-topbar { padding: 0 0.875rem; }
   .sa-brand { font-size: 1.2rem; }
 }
-

@@ -122,6 +122,10 @@ const ParticipantDetails = () => {
               <p>{summary.approved_reviews || 0}</p>
             </article>
             <article>
+              <h4>Eligible Payouts</h4>
+              <p>{summary.payouts_eligible || 0}</p>
+            </article>
+            <article>
               <h4>Payouts Paid</h4>
               <p>{summary.payouts_paid || 0}</p>
             </article>
