@@ -299,7 +299,21 @@ const ParticipantDashboard = () => {
 
       const nextApplied = Array.isArray(appliedRes?.data) ? appliedRes.data : [];
       setAppliedProjects(nextApplied);
-      setCompletedProjects(Array.isArray(completedRes?.data) ? completedRes.data : []);
+
+      // Use dedicated /projects/completed endpoint; if it returns nothing,
+      // fall back to COMPLETED-status items from the applied list (which
+      // includes allocations whose status has been marked COMPLETED).
+      const dedicatedCompleted = Array.isArray(completedRes?.data) ? completedRes.data : [];
+      if (dedicatedCompleted.length > 0) {
+        setCompletedProjects(dedicatedCompleted);
+      } else {
+        const completedFromApplied = nextApplied.filter(
+          (item) =>
+            String(item?.status || "").toUpperCase() === "COMPLETED" ||
+            String(item?.allocation?.status || "").toUpperCase() === "COMPLETED"
+        );
+        setCompletedProjects(completedFromApplied);
+      }
 
       const nextCatalog = Array.isArray(catalogRes?.data?.data) ? catalogRes.data.data : [];
       const activeItems = Array.isArray(activeRes?.data) ? activeRes.data : [];
@@ -846,10 +860,10 @@ const ParticipantDashboard = () => {
                   <div key={item.id} className="nd-list-card nd-list-card--completed">
                     <div className="nd-list-card-icon">★</div>
                     <div className="nd-list-card-body">
-                      <h4>{item?.project_products?.name || "—"}</h4>
-                      <span className="nd-list-card-project">{item?.projects?.title || "—"}</span>
+                      <h4>{item?.project_products?.name || item?.name || "—"}</h4>
+                      <span className="nd-list-card-project">{item?.projects?.title || item?.project_title || "—"}</span>
                       <span className="nd-list-card-date">
-                        Completed {formatDateTime(item?.completed_at || item?.reviewed_at)}
+                        Completed {formatDateTime(item?.completed_at || item?.reviewed_at || item?.updated_at)}
                       </span>
                     </div>
                     <StatusBadge status="COMPLETED" />
@@ -921,4 +935,3 @@ const ParticipantDashboard = () => {
 };
 
 export default ParticipantDashboard;
-

@@ -396,7 +396,7 @@ const Dashboard = () => {
           <button
             type="button"
             className="sa-new-project-btn"
-            onClick={() => navigate("/projects/manage")}
+            onClick={() => navigate("/projects/create")}
           >
             <span>+</span> New Project
           </button>
