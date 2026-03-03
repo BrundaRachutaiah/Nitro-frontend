@@ -1,8 +1,41 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  clearOauthHash,
+  clearStoredTokens,
+  extractAccessTokenFromHash,
+  storeToken,
+  verifyBackendUser,
+} from "../../lib/auth";
 
 const RoleSelection = () => {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const token = extractAccessTokenFromHash();
+    if (!token) return;
+
+    (async () => {
+      try {
+        const user = await verifyBackendUser(token);
+        storeToken(token, true);
+        clearOauthHash();
+
+        const routes = {
+          SUPER_ADMIN: `/super-admin/${user.id}/dashboard`,
+          ADMIN: `/admin/${user.id}/dashboard`,
+          PARTICIPANT: `/participant/${user.id}/dashboard`,
+          BRAND: `/brand/dashboard`,
+        };
+
+        navigate(routes[user.role] || "/login", { replace: true });
+      } catch (err) {
+        clearOauthHash();
+        clearStoredTokens();
+      }
+    })();
+  }, [navigate]);
+
   const [hovered, setHovered] = useState(null);
 
   return (

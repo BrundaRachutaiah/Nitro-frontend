@@ -8,6 +8,7 @@ import {
   verifyBackendUser,
   storeToken,
 } from "../../lib/auth";
+import { savePaymentDetails } from "../../api/allocation.api";
 
 const SIGNUP_COOLDOWN_UNTIL_KEY = "nitro_signup_cooldown_until";
 
@@ -124,7 +125,7 @@ const Register = () => {
 
     setIsSubmitting(true);
     try {
-      await signUpWithSupabase({
+      const signupData = await signUpWithSupabase({
         email: email.trim(), password,
         fullName: fullName.trim(), phone: phone.trim(),
         registrationDetails: {
@@ -139,6 +140,39 @@ const Register = () => {
           terms_accepted: false, terms_accepted_at: null,
         },
       });
+
+      // ── Save bank details to backend database immediately after signup ──
+      // Supabase returns an access_token on signup — use it to authenticate
+      // the payment-details save so bank data is available for payouts.
+      const accessToken = signupData?.access_token || signupData?.session?.access_token;
+      if (accessToken) {
+        try {
+          // Temporarily store the token so axiosInstance can attach it
+          storeToken(accessToken, false);
+          await savePaymentDetails({
+            address: {
+              address_line1: "",
+              address_line2: "",
+              city: "",
+              state: "",
+              pincode: "",
+              country: "India",
+            },
+            bankDetails: {
+              bank_account_name: accountHolderName.trim(),
+              bank_account_number: accountNumber.trim(),
+              bank_ifsc: ifscCode.trim().toUpperCase(),
+              bank_name: accountType,
+            },
+          });
+        } catch {
+          // Non-fatal: bank details can be updated later from Profile page
+        } finally {
+          // Clear the token — user must verify email before proper login
+          import("../../lib/auth").then(({ clearStoredTokens }) => clearStoredTokens());
+        }
+      }
+
       setSuccess("✅ Account created! A verification email has been sent to " + email.trim() + ". Please verify your email, then wait for admin approval before signing in.");
       setTimeout(() => navigate("/login/participant", { replace: true }), 4000);
     } catch (err) {

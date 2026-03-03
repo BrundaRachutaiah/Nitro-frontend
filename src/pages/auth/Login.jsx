@@ -26,6 +26,18 @@ const S = {
 
 const Login = ({ mode = "participant" }) => {
   const navigate = useNavigate();
+
+  // ADD THIS after: const navigate = useNavigate();
+const redirectByRole = (role) => {
+  const routes = {
+    SUPER_ADMIN: "/super-admin",
+    ADMIN: "/admin",
+    BRAND: "/brand",
+    PARTICIPANT: "/participant",
+  };
+  navigate(routes[role] || "/login", { replace: true });
+};
+
   const isAdmin = mode === "admin";
 
   const [email, setEmail] = useState("");
@@ -43,10 +55,10 @@ const Login = ({ mode = "participant" }) => {
     if (!token) return;
     (async () => {
       try {
-        await verifyBackendUser(token);
-        storeToken(token, true);
-        clearOauthHash();
-        navigate("/dashboard", { replace: true });
+        const user = await verifyBackendUser(token);
+storeToken(token, true);
+clearOauthHash();
+redirectByRole(user.role);
       } catch (err) {
         clearOauthHash();
         setError(err.message || "Google sign-in failed.");
@@ -61,10 +73,10 @@ const Login = ({ mode = "participant" }) => {
     setIsSubmitting(true);
     try {
       const token = await signInWithSupabase({ email, password });
-      await verifyBackendUser(token);
-      storeToken(token, true);
-      setPassword("");
-      navigate("/dashboard", { replace: true });
+      const user = await verifyBackendUser(token);
+storeToken(token, true);
+setPassword("");
+redirectByRole(user.role);
     } catch (err) {
       const msg = String(err?.message || "");
       const low = msg.toLowerCase();
