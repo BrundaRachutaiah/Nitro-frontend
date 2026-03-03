@@ -39,10 +39,10 @@ const PayoutStatus = () => {
   }, []);
 
   const summary = useMemo(() => {
-    const total = data.reduce((sum, item) => sum + Number((item?.total_amount ?? item?.amount) || 0), 0);
+    const total = data.reduce((sum, item) => sum + Number(item?.product_amount || 0), 0);
     const paid = data
       .filter((item) => String(item?.status || "").toUpperCase() === "PAID")
-      .reduce((sum, item) => sum + Number((item?.total_amount ?? item?.amount) || 0), 0);
+      .reduce((sum, item) => sum + Number(item?.product_amount || 0), 0);
     const pending = Math.max(0, total - paid);
     return { total, paid, pending };
   }, [data]);
@@ -94,9 +94,7 @@ const PayoutStatus = () => {
                 <thead>
                   <tr>
                     <th>Project</th>
-                    <th>Reward</th>
-                    <th>Product</th>
-                    <th>Total</th>
+                    <th>Amount</th>
                     <th>Status</th>
                     <th>Batch</th>
                     <th>Note</th>
@@ -110,9 +108,7 @@ const PayoutStatus = () => {
                     return (
                       <tr key={item.id}>
                         <td>{projectTitle}</td>
-                        <td>{formatCurrency(item?.reward_amount)}</td>
                         <td>{formatCurrency(item?.product_amount)}</td>
-                        <td>{formatCurrency(item?.total_amount ?? item?.amount)}</td>
                         <td>
                           <span className={`participant-payout-status status-${status.toLowerCase()}`}>{status}</span>
                         </td>
