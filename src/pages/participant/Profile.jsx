@@ -45,49 +45,36 @@ const Profile = () => {
       setLoading(true);
       setError("");
       try {
+        // getMyProfile now returns merged data including bank/address from participant_details
         const [profileRes, detailsRes] = await Promise.all([
           getMyProfile(),
           getPaymentDetails()
         ]);
 
         const profile = profileRes?.data?.data || {};
+        // participant_details takes priority; fall back to profile fields
         const details = detailsRes?.data?.data?.details || {};
 
-        setForm({
-          full_name: profile.full_name || "",
-          email: profile.email || "",
-          role: profile.role || "",
-          status: profile.status || "",
-          created_at: profile.created_at || "",
-          address_line1: details.address_line1 || "",
-          address_line2: details.address_line2 || "",
-          city: details.city || "",
-          state: details.state || "",
-          pincode: details.pincode || "",
-          country: details.country || "India",
-          bank_account_name: details.bank_account_name || "",
-          bank_account_number: details.bank_account_number || "",
-          bank_ifsc: details.bank_ifsc || "",
-          bank_name: details.bank_name || ""
-        });
+        const merged = {
+          full_name:           profile.full_name  || "",
+          email:               profile.email      || "",
+          role:                profile.role       || "",
+          status:              profile.status     || "",
+          created_at:          profile.created_at || "",
+          address_line1:       details.address_line1       || profile.address_line1       || "",
+          address_line2:       details.address_line2       || profile.address_line2       || "",
+          city:                details.city                || profile.city                || "",
+          state:               details.state               || profile.state               || "",
+          pincode:             details.pincode             || profile.pincode             || "",
+          country:             details.country             || profile.country             || "India",
+          bank_account_name:   details.bank_account_name   || profile.bank_account_name   || "",
+          bank_account_number: details.bank_account_number || profile.bank_account_number || "",
+          bank_ifsc:           details.bank_ifsc           || profile.bank_ifsc           || "",
+          bank_name:           details.bank_name           || profile.bank_name           || "",
+        };
 
-        setInitialLoadedForm({
-          full_name: profile.full_name || "",
-          email: profile.email || "",
-          role: profile.role || "",
-          status: profile.status || "",
-          created_at: profile.created_at || "",
-          address_line1: details.address_line1 || "",
-          address_line2: details.address_line2 || "",
-          city: details.city || "",
-          state: details.state || "",
-          pincode: details.pincode || "",
-          country: details.country || "India",
-          bank_account_name: details.bank_account_name || "",
-          bank_account_number: details.bank_account_number || "",
-          bank_ifsc: details.bank_ifsc || "",
-          bank_name: details.bank_name || ""
-        });
+        setForm(merged);
+        setInitialLoadedForm(merged);
       } catch (err) {
         setError(err?.response?.data?.message || "Unable to load profile.");
       } finally {

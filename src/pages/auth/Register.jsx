@@ -143,22 +143,15 @@ const Register = () => {
       });
 
       // ── Save bank details to backend database immediately after signup ──
-      // Supabase returns an access_token on signup — use it to authenticate
-      // the payment-details save so bank data is available for payouts.
       const accessToken = signupData?.access_token || signupData?.session?.access_token;
       if (accessToken) {
         try {
           // Temporarily store the token so axiosInstance can attach it
           storeToken(accessToken, false);
+          // Only pass bankDetails — address is empty at registration time.
+          // The backend now accepts bank-only saves (address fields are optional).
           await savePaymentDetails({
-            address: {
-              address_line1: "",
-              address_line2: "",
-              city: "",
-              state: "",
-              pincode: "",
-              country: "India",
-            },
+            address: {},
             bankDetails: {
               bank_account_name: accountHolderName.trim(),
               bank_account_number: accountNumber.trim(),
