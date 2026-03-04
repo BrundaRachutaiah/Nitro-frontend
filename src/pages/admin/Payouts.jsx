@@ -698,9 +698,9 @@ export default function AdminPayouts() {
                           {batch.status || "IN_BATCH"}
                         </span>
 
-                        {/* total amount */}
+                        {/* total amount — sum of each participant's product_amount */}
                         <div className="pay-batch-amount" onClick={(e) => e.stopPropagation()}>
-                          {fmt(batch.total_amount)}
+                          {fmt(participants.reduce((sum, p) => sum + Number(p.product_amount || 0), 0))}
                         </div>
 
                         {/* action buttons */}

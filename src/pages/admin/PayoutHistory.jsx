@@ -141,7 +141,13 @@ const PayoutHistory = () => {
 
   useEffect(() => { loadHistory(); }, []);
 
-  const totalPaid = useMemo(() => rows.reduce((s, r) => s + Number(r?.total_amount || 0), 0), [rows]);
+  const totalPaid = useMemo(() =>
+    rows.reduce((s, r) => {
+      const participants = Array.isArray(r?.participants) ? r.participants : [];
+      const batchTotal = participants.reduce((ps, p) => ps + Number(p?.product_amount || 0), 0);
+      return s + batchTotal;
+    }, 0),
+  [rows]);
 
   return (
     <div className="sa-dashboard">
@@ -262,7 +268,10 @@ const PayoutHistory = () => {
                           <td className="sa-td-muted">{pt?.bank_account_number || "—"}</td>
                           <td className="sa-td-muted">{pt?.bank_ifsc || "—"}</td>
                           <td className="sa-td-muted" style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={formatAddress(pt)}>{formatAddress(pt)}</td>
-                          <td className="sa-td-bold">{inr.format(batch.total_amount || 0)}</td>
+                          <td className="sa-td-bold">{inr.format(
+                            (Array.isArray(batch?.participants) ? batch.participants : [])
+                              .reduce((s, p) => s + Number(p?.product_amount || 0), 0)
+                          )}</td>
                           <td><span className="sa-status-badge sa-status-badge--published">PAID</span></td>
                           <td className="sa-td-muted">{fmtDate(batch.created_at)}</td>
                         </tr>

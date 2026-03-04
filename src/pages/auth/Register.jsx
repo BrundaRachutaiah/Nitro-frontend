@@ -55,6 +55,7 @@ const Register = () => {
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   /* Google OAuth callback */
   useEffect(() => {
@@ -173,8 +174,7 @@ const Register = () => {
         }
       }
 
-      setSuccess("✅ Account created! A verification email has been sent to " + email.trim() + ". Please verify your email, then wait for admin approval before signing in.");
-      setTimeout(() => navigate("/login/participant", { replace: true }), 4000);
+      setShowSuccessModal(true);
     } catch (err) {
       const raw = String(err?.message || "");
       const low = raw.toLowerCase();
@@ -294,6 +294,21 @@ const Register = () => {
         .rg-foot a:hover{opacity:.75;}
         .rg-sc{display:none;}
         .rg-sc.active{display:block;animation:rgU .4s cubic-bezier(.22,1,.36,1) both;}
+
+        /* ── Success Modal ── */
+        .rg-modal-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:1.5rem;background:rgba(4,13,18,0.82);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:rgU .25s ease both;}
+        .rg-modal{background:linear-gradient(160deg,rgba(0,198,255,0.09) 0%,rgba(4,13,18,0.97) 55%);border:1.5px solid rgba(0,198,255,0.25);border-radius:24px;padding:2.5rem 2.25rem 2rem;max-width:420px;width:100%;text-align:center;box-shadow:0 0 60px rgba(0,198,255,0.12),0 24px 64px rgba(0,0,0,0.6);animation:modalPop .45s cubic-bezier(.22,1,.36,1) both;}
+        @keyframes modalPop{from{opacity:0;transform:scale(.88) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
+        .rg-modal-icon{width:64px;height:64px;border-radius:50%;background:rgba(0,198,255,0.1);border:1.5px solid rgba(0,198,255,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;}
+        .rg-modal-icon svg{width:30px;height:30px;color:#00c6ff;}
+        .rg-modal-title{font-family:'Syne',sans-serif;font-size:1.45rem;font-weight:800;color:#e8f7ff;letter-spacing:-.02em;margin-bottom:.6rem;}
+        .rg-modal-steps{list-style:none;margin:1.25rem 0 1.75rem;display:flex;flex-direction:column;gap:.75rem;text-align:left;}
+        .rg-modal-step{display:flex;align-items:flex-start;gap:.75rem;padding:.75rem .9rem;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);}
+        .rg-modal-step-num{width:22px;height:22px;border-radius:50%;background:rgba(0,198,255,.15);border:1px solid rgba(0,198,255,.3);color:#00c6ff;font-size:.68rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+        .rg-modal-step-text{font-size:.83rem;font-weight:400;color:rgba(255,255,255,.6);line-height:1.5;}
+        .rg-modal-step-text strong{color:rgba(255,255,255,.88);font-weight:600;display:block;margin-bottom:2px;}
+        .rg-modal-btn{width:100%;padding:.88rem 1rem;background:#00c6ff;border:none;border-radius:12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.93rem;font-weight:700;color:#040d12;letter-spacing:.01em;box-shadow:0 0 28px rgba(0,198,255,.28);transition:opacity .2s,transform .2s;}
+        .rg-modal-btn:hover{opacity:.9;transform:translateY(-2px);}
       `}</style>
 
       <div className="rg-root">
@@ -332,15 +347,7 @@ const Register = () => {
                 <span>{error}</span>
               </div>
             )}
-            {success && (
-              <div className="rg-alert rg-ok" role="status">
-                <span className="rg-ok-icon">📧</span>
-                <div>
-                  <div style={{fontWeight:700,marginBottom:".25rem"}}>Verify your email</div>
-                  <div style={{fontWeight:400,fontSize:".82rem",opacity:.85}}>{success}</div>
-                </div>
-              </div>
-            )}
+
 
             {/* ── STEP 1 ── */}
             <div className={`rg-sc ${step === 1 ? "active" : ""}`}>
@@ -511,6 +518,50 @@ const Register = () => {
           <p className="rg-foot">Already have an account?&nbsp;<Link to="/login/participant">Sign In</Link></p>
         </div>
       </div>
+
+      {/* ── Success Modal ── */}
+      {showSuccessModal && (
+        <div className="rg-modal-overlay">
+          <div className="rg-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <div className="rg-modal-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <path d="m9 11 3 3L22 4"/>
+              </svg>
+            </div>
+            <div className="rg-modal-title" id="modal-title">Registration Successful!</div>
+            <ol className="rg-modal-steps">
+              <li className="rg-modal-step">
+                <div className="rg-modal-step-num">1</div>
+                <div className="rg-modal-step-text">
+                  <strong>Verify your email</strong>
+                  A verification link has been sent to <span style={{color:"#00c6ff"}}>{email}</span>. Please check your inbox and confirm your email address.
+                </div>
+              </li>
+              <li className="rg-modal-step">
+                <div className="rg-modal-step-num">2</div>
+                <div className="rg-modal-step-text">
+                  <strong>Await admin approval</strong>
+                  Your registration request has been sent to the Nitro admin team. They will review and approve your account.
+                </div>
+              </li>
+              <li className="rg-modal-step">
+                <div className="rg-modal-step-num">3</div>
+                <div className="rg-modal-step-text">
+                  <strong>Watch for our email</strong>
+                  Once approved, you'll receive a confirmation email from Nitro. You can then sign in and start using your account.
+                </div>
+              </li>
+            </ol>
+            <button
+              className="rg-modal-btn"
+              onClick={() => navigate("/login/participant", { replace: true })}
+            >
+              Go to Sign In
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 };
