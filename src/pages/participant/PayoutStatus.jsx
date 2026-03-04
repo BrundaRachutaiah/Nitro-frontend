@@ -7,8 +7,71 @@ const formatCurrency = (value) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   }).format(Number(value || 0));
+
+const fmt = (d) => {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-IN", {
+    day: "numeric", month: "short", year: "numeric",
+  });
+};
+
+const STATUS_META = {
+  PENDING:  { label: "Under Review", cls: "status-pending",  icon: "⏳" },
+  ELIGIBLE: { label: "Approved",     cls: "status-eligible", icon: "✅" },
+  APPROVED: { label: "Approved",     cls: "status-approved", icon: "✅" },
+  IN_BATCH: { label: "Processing",   cls: "status-in_batch", icon: "🔄" },
+  EXPORTED: { label: "Processing",   cls: "status-exported", icon: "🔄" },
+  PAID:     { label: "Paid",         cls: "status-paid",     icon: "💸" },
+  REJECTED: { label: "Not Approved", cls: "status-rejected", icon: "✕"  },
+  FAILED:   { label: "Failed",       cls: "status-failed",   icon: "✕"  },
+};
+
+const getStatusMeta = (raw) =>
+  STATUS_META[String(raw || "").toUpperCase()] ||
+  { label: raw || "Pending", cls: "status-pending", icon: "⏳" };
+
+/* ── Awaiting state — shown when no payout records exist yet ── */
+const AwaitingPane = () => (
+  <div className="pp-awaiting">
+    <div className="pp-awaiting-icon">📬</div>
+    <h2 className="pp-awaiting-title">Your submissions are under review</h2>
+    <p className="pp-awaiting-body">
+      Our team is currently reviewing your invoice and review submissions.
+      Once everything is verified and approved, your reimbursement will be
+      scheduled for transfer.
+    </p>
+
+    <div className="pp-awaiting-steps">
+      <div className="pp-awaiting-step">
+        <span className="pp-awaiting-step-dot pp-dot--done">✓</span>
+        <span>Invoice &amp; review submitted</span>
+      </div>
+      <div className="pp-awaiting-step">
+        <span className="pp-awaiting-step-dot pp-dot--active">⏳</span>
+        <span>Admin review in progress</span>
+      </div>
+      <div className="pp-awaiting-step">
+        <span className="pp-awaiting-step-dot pp-dot--pending">○</span>
+        <span>Payout approved &amp; scheduled</span>
+      </div>
+      <div className="pp-awaiting-step">
+        <span className="pp-awaiting-step-dot pp-dot--pending">○</span>
+        <span>Reimbursement transferred to your account</span>
+      </div>
+    </div>
+
+    <div className="pp-awaiting-notice">
+      <span className="pp-notice-icon">✉️</span>
+      <p>
+        You will receive an <strong>email notification</strong> as soon as your
+        payout is approved and ready for transfer. Once you get that email,
+        come back to this page to check your payment details and transfer status.
+      </p>
+    </div>
+  </div>
+);
 
 const PayoutStatus = () => {
   const navigate = useNavigate();
@@ -17,9 +80,11 @@ const PayoutStatus = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const participantDashboardPath = id ? `/participant/${id}/dashboard` : "/dashboard";
-  const participantAllocationPath = id ? `/participant/${id}/allocation/active` : "/dashboard";
-  const participantPayoutPath = id ? `/participant/${id}/payouts` : "/dashboard";
+  const P = {
+    dash:    id ? `/participant/${id}/dashboard`         : "/dashboard",
+    tasks:   id ? `/participant/${id}/allocation/active` : "/dashboard",
+    payouts: id ? `/participant/${id}/payouts`           : "/dashboard",
+  };
 
   const loadPayouts = async () => {
     setLoading(true);
@@ -34,27 +99,26 @@ const PayoutStatus = () => {
     }
   };
 
-  useEffect(() => {
-    loadPayouts();
-  }, []);
+  useEffect(() => { loadPayouts(); }, []);
 
   const summary = useMemo(() => {
-    const total = data.reduce((sum, item) => sum + Number(item?.product_amount || 0), 0);
-    const paid = data
-      .filter((item) => String(item?.status || "").toUpperCase() === "PAID")
-      .reduce((sum, item) => sum + Number(item?.product_amount || 0), 0);
-    const pending = Math.max(0, total - paid);
-    return { total, paid, pending };
+    const total = data.reduce((s, i) => s + Number(i?.product_amount || 0), 0);
+    const paid  = data
+      .filter((i) => String(i?.status || "").toUpperCase() === "PAID")
+      .reduce((s, i) => s + Number(i?.product_amount || 0), 0);
+    return { total, paid, pending: Math.max(0, total - paid) };
   }, [data]);
+
+  const hasPayoutRecords = data.length > 0;
 
   return (
     <div className="participant-payout-page">
       <header className="participant-payout-topbar">
         <div className="participant-payout-brand">Nitro</div>
         <nav>
-          <button type="button" onClick={() => navigate(participantDashboardPath)}>Dashboard</button>
-          <button type="button" onClick={() => navigate(participantAllocationPath)}>My Tasks</button>
-          <button type="button" className="active" onClick={() => navigate(participantPayoutPath)}>Payouts</button>
+          <button type="button" onClick={() => navigate(P.dash)}>Dashboard</button>
+          <button type="button" onClick={() => navigate(P.tasks)}>My Tasks</button>
+          <button type="button" className="active" onClick={() => navigate(P.payouts)}>Payouts</button>
         </nav>
       </header>
 
@@ -62,67 +126,85 @@ const PayoutStatus = () => {
         <section className="participant-payout-head">
           <div>
             <h1>My Payouts</h1>
-            <p>Track your payout progress and payment history.</p>
+            <p>Track your reimbursement status and payment history.</p>
           </div>
-          <button type="button" onClick={loadPayouts}>Refresh</button>
+          <button type="button" className="pp-refresh-btn" onClick={loadPayouts}>↻ Refresh</button>
         </section>
 
-        {error ? <div className="participant-payout-error">{error}</div> : null}
+        {error && <div className="participant-payout-error">{error}</div>}
 
-        <section className="participant-payout-cards">
-          <article>
-            <h2>Total Earned</h2>
-            <p>{formatCurrency(summary.total)}</p>
-          </article>
-          <article>
-            <h2>Paid Out</h2>
-            <p>{formatCurrency(summary.paid)}</p>
-          </article>
-          <article>
-            <h2>Pending</h2>
-            <p>{formatCurrency(summary.pending)}</p>
-          </article>
-        </section>
+        {loading && (
+          <div className="pp-loading">
+            <div className="pp-spinner" />
+            <span>Loading your payout details…</span>
+          </div>
+        )}
 
-        <section className="participant-payout-table-card">
-          <h2>Payout History</h2>
-          {loading ? <p className="participant-payout-loading">Loading payout entries...</p> : null}
-          {!loading && !data.length ? <p className="participant-payout-empty">No payout records yet.</p> : null}
-          {!loading && data.length ? (
-            <div className="participant-payout-table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Project</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Batch</th>
-                    <th>Note</th>
-                    <th>Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.map((item) => {
-                    const projectTitle = item?.projects?.title || item?.projects?.name || "Project";
-                    const status = String(item?.status || "PENDING").toUpperCase();
-                    return (
-                      <tr key={item.id}>
-                        <td>{projectTitle}</td>
-                        <td>{formatCurrency(item?.product_amount)}</td>
-                        <td>
-                          <span className={`participant-payout-status status-${status.toLowerCase()}`}>{status}</span>
-                        </td>
-                        <td>{item?.payout_batch_id || "-"}</td>
-                        <td>{item?.eligibility_reason || "-"}</td>
-                        <td>{item?.created_at ? new Date(item.created_at).toLocaleString() : "-"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </section>
+        {!loading && !hasPayoutRecords && <AwaitingPane />}
+
+        {!loading && hasPayoutRecords && (
+          <>
+            <section className="participant-payout-cards">
+              <article>
+                <h2>Total Reimbursement</h2>
+                <p>{formatCurrency(summary.total)}</p>
+              </article>
+              <article>
+                <h2>Paid Out</h2>
+                <p>{formatCurrency(summary.paid)}</p>
+              </article>
+              <article>
+                <h2>Pending Transfer</h2>
+                <p>{formatCurrency(summary.pending)}</p>
+              </article>
+            </section>
+
+            <section className="participant-payout-table-card">
+              <h2>Payout Details</h2>
+              <div className="participant-payout-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Campaign</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Note</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.map((item) => {
+                      const title = item?.projects?.title || item?.projects?.name || "Campaign";
+                      const { label, cls, icon } = getStatusMeta(item?.status);
+                      return (
+                        <tr key={item.id}>
+                          <td>{title}</td>
+                          <td className="pp-amount">{formatCurrency(item?.product_amount)}</td>
+                          <td>
+                            <span className={`participant-payout-status ${cls}`}>
+                              {icon} {label}
+                            </span>
+                          </td>
+                          <td className="pp-note">{item?.eligibility_reason || "—"}</td>
+                          <td>{fmt(item?.created_at)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="pp-table-notice">
+                <span>✉️</span>
+                <p>
+                  You will be notified by <strong>email</strong> once your payout is
+                  approved and the transfer is initiated. If you have any questions,
+                  please reach out to our support team.
+                </p>
+              </div>
+            </section>
+          </>
+        )}
       </main>
     </div>
   );

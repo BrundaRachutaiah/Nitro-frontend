@@ -444,33 +444,40 @@ const ParticipantDashboard = () => {
     appliedProjects.filter((item) => ["PENDING", "REJECTED"].includes(String(item?.status || "").toUpperCase()))
   , [appliedProjects]);
 
-  /* Approved rows grouped by allocation */
+  /* Approved rows — ALL approved products collapse into ONE single row, ONE button */
   const approvedRows = useMemo(() => {
-    const approved = appliedProjects.filter((item) => String(item?.status || "").toUpperCase() === "APPROVED");
-    const map = new Map();
+    const approved = appliedProjects.filter(
+      (item) => String(item?.status || "").toUpperCase() === "APPROVED"
+    );
+    if (approved.length === 0) return [];
+
+    const group = {
+      id: "approved-all",
+      allocationId: null,
+      allocationStatus: null,
+      products: [],
+      requestedAt: null,
+    };
+
     for (const item of approved) {
       const allocId  = item?.allocation?.id || null;
-      const groupKey = allocId || `proj::${item?.project_id || item.id}`;
-      if (!map.has(groupKey)) {
-        map.set(groupKey, {
-          id: item.id,
-          projectTitle: item?.projects?.title || "—",
-          productNames: [],
-          requestedAt: item?.reviewed_at || item?.created_at || null,
-          allocationId: allocId,
-          allocationStatus: item?.allocation?.status || null,
-        });
-      }
-      const g = map.get(groupKey);
-      const pn = item?.project_products?.name || "—";
-      if (!g.productNames.includes(pn)) g.productNames.push(pn);
-      if (new Date(item?.reviewed_at || item?.created_at || 0) > new Date(g.requestedAt || 0)) {
-        g.requestedAt = item?.reviewed_at || item?.created_at || null;
+      const allocSts = item?.allocation?.status || null;
+      const pn       = item?.project_products?.name || item?.product_name || "—";
+      const brand    = item?.projects?.title || item?.brand_name || null;
+      const itemDate = item?.reviewed_at || item?.created_at || null;
+
+      if (!group.allocationId && allocId)      group.allocationId = allocId;
+      if (!group.allocationStatus && allocSts) group.allocationStatus = allocSts;
+
+      const alreadyAdded = group.products.some((p) => p.name === pn);
+      if (!alreadyAdded) group.products.push({ name: pn, brand });
+
+      if (itemDate && new Date(itemDate) > new Date(group.requestedAt || 0)) {
+        group.requestedAt = itemDate;
       }
     }
-    return Array.from(map.values())
-      .map((g) => ({ ...g, productName: g.productNames.join(", ") }))
-      .sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0));
+
+    return [group];
   }, [appliedProjects]);
 
   const activeTabCount = useMemo(() =>
@@ -525,9 +532,13 @@ const ParticipantDashboard = () => {
   };
 
   /* ── tabs ── */
+  const approvedProductCount = useMemo(() =>
+    appliedProjects.filter((item) => String(item?.status || "").toUpperCase() === "APPROVED").length
+  , [appliedProjects]);
+
   const tabs = [
     { key: "catalog",   label: "Browse Products", count: filteredProducts.length },
-    { key: "approved",  label: "Approved",         count: approvedRows.length },
+    { key: "approved",  label: "Approved",         count: approvedProductCount },
     { key: "applied",   label: "Applied",          count: appliedRows.length },
     { key: "completed", label: "Completed",        count: completedProjects.length },
   ];
@@ -768,8 +779,20 @@ const ParticipantDashboard = () => {
                   <div key={row.id} className="nd-list-card nd-list-card--approved">
                     <div className="nd-list-card-icon">✓</div>
                     <div className="nd-list-card-body">
-                      <h4>{row.productName}</h4>
-                      <span className="nd-list-card-project">{row.projectTitle}</span>
+                      {/* Numbered product list with brand name per item */}
+                      <ul className="nd-approved-product-list">
+                        {row.products.map((p, idx) => (
+                          <li key={idx} className="nd-approved-product-item">
+                            <span className="nd-approved-product-index">{idx + 1}.</span>
+                            <span className="nd-approved-product-info">
+                              <span className="nd-approved-product-name">{p.name}</span>
+                              {p.brand && (
+                                <span className="nd-approved-product-brand">{p.brand}</span>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                       <span className="nd-list-card-date">Approved {formatDateTime(row.requestedAt)}</span>
                     </div>
                     <StatusBadge status={row.allocationStatus || "APPROVED"} />
@@ -783,7 +806,7 @@ const ParticipantDashboard = () => {
                             navigate(`${path("allocation/active")}?allocation=${row.allocationId}`);
                           }}
                         >
-                          Submit Invoice & Review →
+                          Submit Invoice &amp; Review →
                         </button>
                       ) : (
                         <span className="nd-chip nd-chip--waiting">⏳ Allocation Pending</span>

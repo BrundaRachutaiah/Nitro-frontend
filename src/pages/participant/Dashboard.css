@@ -690,6 +690,45 @@
 .nd-list-card-status  { flex-shrink: 0; }
 .nd-list-card-action  { flex-shrink: 0; }
 
+/* ── Approved tab: product list (numbered, brand per item) ── */
+.nd-list-card-project-title {
+  font-family: 'Sora', sans-serif;
+  font-size: 0.95rem; font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.nd-list-card-brand {
+  font-size: 0.78rem; color: var(--accent);
+  font-weight: 600; margin-bottom: 4px;
+  display: block;
+}
+.nd-approved-product-list {
+  list-style: none;
+  margin: 2px 0 6px 0;
+  padding: 0;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.nd-approved-product-item {
+  display: flex; align-items: flex-start; gap: 7px;
+}
+.nd-approved-product-index {
+  color: var(--accent);
+  font-size: 0.78rem; font-weight: 700;
+  flex-shrink: 0; line-height: 1.5;
+  min-width: 14px;
+}
+.nd-approved-product-info {
+  display: flex; flex-direction: column; gap: 1px;
+}
+.nd-approved-product-name {
+  font-size: 0.85rem; font-weight: 600;
+  color: var(--text-primary); line-height: 1.4;
+}
+.nd-approved-product-brand {
+  font-size: 0.75rem; color: var(--text-muted);
+  line-height: 1.3;
+}
+
 /* ══════════════════════════════════════════
    EMPTY STATE
 ══════════════════════════════════════════ */
@@ -824,4 +863,3 @@
   .nd-product-grid { grid-template-columns: 1fr; }
   .nd-hero-stats { display: none; }
 }
-
