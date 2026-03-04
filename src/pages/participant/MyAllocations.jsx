@@ -497,7 +497,19 @@ const MyAllocations = () => {
                       <div className="ma-product-list-label">Products to buy ({products.length})</div>
                       {products.map((p, i) => (
                         <div key={p.product_id || i} className="ma-product-row">
-                          <div className="ma-product-row-name">{p.product_name || "Product"}</div>
+                          <div className="ma-product-row-name">
+                            <span>{p.product_name || "Product"}</span>
+                            {p.product_url && (
+                              <a
+                                href={p.product_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ma-product-link"
+                              >
+                                Buy on Amazon ↗
+                              </a>
+                            )}
+                          </div>
                           <div className="ma-product-row-price">{fmt(p.product_value)}</div>
                         </div>
                       ))}
