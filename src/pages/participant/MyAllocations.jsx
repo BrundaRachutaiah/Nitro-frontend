@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { getMyAllocationTracking, updateAllocationStatus } from "../../api/allocation.api";
+import { cancelAllocation, getMyAllocationTracking, updateAllocationStatus } from "../../api/allocation.api";
 import { uploadPurchaseProof } from "../../api/verification.api";
 import { submitReview, uploadReviewProofs } from "../../api/participant.api";
 import "./MyAllocations.css";
@@ -40,6 +40,51 @@ const ConfirmModal = ({ products, onClose, onConfirm, submitting }) => (
         <button type="button" className="ma-modal-btn-secondary" onClick={onClose} disabled={submitting}>← Go Back</button>
         <button type="button" className="ma-modal-btn-primary" onClick={onConfirm} disabled={submitting}>
           {submitting ? "Submitting…" : "Confirm & Submit to Admin →"}
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+/* ── Cancel Allocation Modal ── */
+const CancelModal = ({ projectName, products, onClose, onConfirm, busy }) => (
+  <div className="ma-modal-overlay" onClick={onClose}>
+    <div className="ma-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="ma-modal-icon" style={{ fontSize: "2.2rem" }}>⚠️</div>
+      <h2 className="ma-modal-title">Cancel Reservation?</h2>
+      <p className="ma-modal-sub">
+        Are you sure you want to cancel your reservation for <strong>{projectName}</strong>?
+        Your slot will be released and the budget returned to the project pool.
+      </p>
+      {products.length > 0 && (
+        <div className="ma-modal-list">
+          {products.map((p, i) => (
+            <div key={p.product_id || i} className="ma-modal-prod-row">
+              <div className="ma-modal-prod-name">{p.product_name || "Product"}</div>
+              <span className="ma-modal-check missing">✕ Will be released</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="ma-modal-warn" style={{ borderColor: "#e74c3c", color: "#c0392b", background: "#fff0f0" }}>
+        ⚠️ This action cannot be undone. You will need to re-apply to participate again.
+      </div>
+      <div className="ma-modal-actions">
+        <button type="button" className="ma-modal-btn-secondary" onClick={onClose} disabled={busy}>
+          ← Keep Reservation
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={busy}
+          style={{
+            padding: "12px 28px", borderRadius: "10px", fontWeight: 700,
+            fontSize: "15px", border: "none", cursor: busy ? "not-allowed" : "pointer",
+            background: busy ? "#ccc" : "linear-gradient(135deg,#e74c3c,#c0392b)",
+            color: "#fff", opacity: busy ? 0.6 : 1
+          }}
+        >
+          {busy ? "Cancelling…" : "Yes, Cancel Reservation"}
         </button>
       </div>
     </div>
@@ -268,6 +313,9 @@ const MyAllocations = () => {
   const [panel,     setPanel]     = useState(null); // { prodId, step }
   const [showConfirm,  setShowConfirm]  = useState(false);
   const [confirmBusy,  setConfirmBusy]  = useState(false);
+  const [showCancel,   setShowCancel]   = useState(false);
+  const [cancelBusy,   setCancelBusy]   = useState(false);
+  const [cancelError,  setCancelError]  = useState("");
   const [tick, setTick] = useState(0);
 
   const storageKey = `${PURCHASE_KEY_PREFIX}${id || "x"}`;
@@ -324,7 +372,6 @@ const MyAllocations = () => {
   }, [data, ACTIVE]);
   const status      = String(active?.status || "RESERVED").toUpperCase();
   const isCompleted = status === "COMPLETED";
-  const isPurchased = status === "PURCHASED";
   const isPurchaseConfirmed = useMemo(() => {
     const allActive = data.filter((r) => ACTIVE.includes(String(r?.status || "").toUpperCase()));
     return allActive.length > 0 && allActive.every((r) =>
@@ -384,6 +431,30 @@ const MyAllocations = () => {
     navigate(P.payouts);
   };
 
+  const handleCancel = async () => {
+    // Capture allocationId synchronously before any async work
+    const allocationId = active?.id;
+    if (!allocationId) {
+      setCancelError("Could not find your allocation. Please refresh and try again.");
+      return;
+    }
+    setCancelBusy(true);
+    setCancelError("");
+    try {
+      await cancelAllocation(allocationId);
+      setShowCancel(false);
+      setCancelBusy(false);
+      navigate(P.dash);
+    } catch (err) {
+      console.error('[Cancel] Error:', err?.response?.status, err?.response?.data);
+      const msg = err?.response?.data?.message
+        || err?.message
+        || "Failed to cancel. Please refresh and try again.";
+      setCancelError(msg);
+      setCancelBusy(false);
+    }
+  };
+
   const history = useMemo(() => {
     const rows = [];
     // Collect history from ALL active allocations, not just the focused one
@@ -404,7 +475,7 @@ const MyAllocations = () => {
     return rows.sort((a, b) => new Date(b.at) - new Date(a.at));
   }, [data, ACTIVE]);
 
-  const chipColor = (s) => ({ APPROVED:"#22c55e", PENDING:"#f59e0b", REJECTED:"#ef4444", SUBMITTED:"#3b82f6", COMPLETED:"#10b981", PURCHASED:"#06b6d4", RESERVED:"#06b6d4", EXPIRED:"#f97316" }[s] || "#94a3b8");
+  const chipColor = (s) => ({ APPROVED:"#22c55e", PENDING:"#f59e0b", REJECTED:"#ef4444", SUBMITTED:"#3b82f6", COMPLETED:"#10b981", PURCHASED:"#06b6d4", RESERVED:"#06b6d4", EXPIRED:"#f97316", CANCELLED:"#e74c3c" }[s] || "#94a3b8");
 
   const panelProduct = panel ? products.find((p) => p.product_id === panel.prodId) || null : null;
 
@@ -515,6 +586,36 @@ const MyAllocations = () => {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Cancel Reservation — only show if slot is still cancellable */}
+              {!showHistory && !allDone && ["RESERVED", "PURCHASED"].includes(status) && (
+                <div className="ma-panel" style={{ marginTop: "8px" }}>
+                  <div className="ma-panel-label" style={{ color: "#e74c3c" }}>⚠️ Cancel Reservation</div>
+                  <p style={{ fontSize: "13px", color: "#9aa3b2", lineHeight: "1.5", margin: "8px 0 12px" }}>
+                    Changed your mind? You can cancel your reservation at any time before completing your tasks.
+                    The budget will be returned to the project pool.
+                  </p>
+                  {cancelError && (
+                    <div style={{ fontSize: "13px", color: "#c0392b", background: "#fff0f0",
+                                  border: "1px solid #e74c3c", borderRadius: "8px",
+                                  padding: "8px 12px", marginBottom: "10px" }}>
+                      {cancelError}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { setCancelError(""); setShowCancel(true); }}
+                    style={{
+                      width: "100%", padding: "10px 16px", borderRadius: "8px",
+                      fontWeight: 700, fontSize: "13px", cursor: "pointer",
+                      background: "transparent", color: "#e74c3c",
+                      border: "1.5px solid #e74c3c", letterSpacing: "0.3px"
+                    }}
+                  >
+                    Cancel Reservation →
+                  </button>
                 </div>
               )}
             </aside>
@@ -694,6 +795,16 @@ const MyAllocations = () => {
           onClose={() => setShowConfirm(false)}
           onConfirm={handleConfirmSubmit}
           submitting={confirmBusy}
+        />
+      )}
+
+      {showCancel && (
+        <CancelModal
+          projectName={projectName}
+          products={products}
+          onClose={() => { setShowCancel(false); setCancelError(""); }}
+          onConfirm={handleCancel}
+          busy={cancelBusy}
         />
       )}
     </div>

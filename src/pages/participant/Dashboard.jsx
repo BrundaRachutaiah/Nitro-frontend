@@ -69,7 +69,7 @@ const openProductLink = (url) => {
 
 /* ─────────────────────────────────────────────────────────────
    STRICT STATUS RESOLVER
-   Priority order: COMPLETED → PURCHASED → APPROVED → PENDING → REJECTED → FRESH
+   Priority order: COMPLETED → CANCELLED → PURCHASED → APPROVED → PENDING → REJECTED → FRESH
    Only ONE state is ever true at a time.
 ───────────────────────────────────────────────────────────── */
 const resolveCardState = (latestApplication) => {
@@ -79,6 +79,8 @@ const resolveCardState = (latestApplication) => {
 
   // Completed beats everything
   if (app === "COMPLETED" || alloc === "COMPLETED") return "COMPLETED";
+  // Cancelled allocation must allow re-apply (not task flow)
+  if (app === "CANCELLED" || alloc === "CANCELLED") return "CANCELLED";
   // Purchased = product in hand, task ongoing
   if (app === "PURCHASED") return "PURCHASED";
   // Approved = admin said yes
@@ -117,6 +119,7 @@ const StatusBadge = ({ status }) => {
     PENDING:   ["Pending Review", "badge--pending"],
     APPROVED:  ["Approved",       "badge--approved"],
     REJECTED:  ["Rejected",       "badge--rejected"],
+    CANCELLED: ["Cancelled",      "badge--rejected"],
     PURCHASED: ["In Progress",    "badge--purchased"],
     COMPLETED: ["Completed",      "badge--completed"],
   };
@@ -131,6 +134,7 @@ const CARD_META = {
   FRESH:     { pill: null,                                            pillCls: "",                      canSelect: true,  canTask: false },
   PENDING:   { pill: "⏳  Awaiting Admin Approval",                  pillCls: "nd-pill--pending",      canSelect: false, canTask: false },
   APPROVED:  { pill: "✓  Product Allocated to You",                  pillCls: "nd-pill--active",       canSelect: false, canTask: true  },
+  CANCELLED: { pill: "✕  Allocation Cancelled",                      pillCls: "nd-pill--rejected",     canSelect: true,  canTask: false },
   PURCHASED: { pill: "🛍  Product Purchased — Complete Your Tasks",   pillCls: "nd-pill--purchased",    canSelect: false, canTask: true  },
   REJECTED:  { pill: "✕  Request Rejected",                          pillCls: "nd-pill--rejected",     canSelect: true,  canTask: false },
   COMPLETED: { pill: "★  Completed",                                  pillCls: "nd-pill--done",         canSelect: true,  canTask: false },
@@ -143,6 +147,7 @@ const ProductCard = ({ item, isSelected, latestApplication, onSelect, onNavigate
   const actionLabel = () => {
     if (isSelected) return "✓ Selected";
     if (cardState === "COMPLETED") return "Request Again";
+    if (cardState === "CANCELLED") return "Request Again";
     if (cardState === "REJECTED")  return "Send New Request";
     return "Select Product";
   };
@@ -444,32 +449,62 @@ const ParticipantDashboard = () => {
     appliedProjects.filter((item) => ["PENDING", "REJECTED"].includes(String(item?.status || "").toUpperCase()))
   , [appliedProjects]);
 
-  /* Approved rows — ALL approved products collapse into ONE single row, ONE button */
-  const approvedRows = useMemo(() => {
-    const approved = appliedProjects.filter(
-      (item) => String(item?.status || "").toUpperCase() === "APPROVED"
-    );
-    if (approved.length === 0) return [];
+  /* Cancelled rows — show in dedicated tab only */
+  const cancelledRows = useMemo(() =>
+    appliedProjects.filter((item) => {
+      const appStatus = String(item?.status || "").toUpperCase();
+      const allocStatus = String(item?.allocation?.status || "").toUpperCase();
+      return appStatus === "CANCELLED" || (allocStatus === "CANCELLED" && appStatus !== "APPROVED");
+    })
+  , [appliedProjects]);
 
-    const group = {
-      id: "approved-all",
-      allocationId: null,
-      allocationStatus: null,
-      products: [],
-      requestedAt: null,
+  /* Approved rows — latest per product, grouped by active allocation (if available) */
+  const approvedRows = useMemo(() => {
+    const toMs = (v) => {
+      const ms = Date.parse(v || "");
+      return Number.isFinite(ms) ? ms : 0;
     };
 
-    for (const item of approved) {
-      const allocId  = item?.allocation?.id || null;
-      const allocSts = item?.allocation?.status || null;
-      const pn       = item?.project_products?.name || item?.product_name || "—";
-      const brand    = item?.projects?.title || item?.brand_name || null;
+    const latestByProduct = new Map();
+    for (const item of appliedProjects) {
+      const projectId = item?.project_id || item?.projects?.id || "";
+      const productId = item?.product_id || item?.project_products?.id || "";
+      if (!projectId || !productId) continue;
+      const key = `${projectId}::${productId}`;
+      const existing = latestByProduct.get(key);
+      const itemMs = Math.max(toMs(item?.reviewed_at), toMs(item?.created_at));
+      const existingMs = existing ? Math.max(toMs(existing?.reviewed_at), toMs(existing?.created_at)) : -1;
+      if (!existing || itemMs >= existingMs) latestByProduct.set(key, item);
+    }
+
+    const approvedLatest = Array.from(latestByProduct.values()).filter(
+      (item) => String(item?.status || "").toUpperCase() === "APPROVED"
+    );
+    if (!approvedLatest.length) return [];
+
+    const groups = new Map();
+    for (const item of approvedLatest) {
+      const projectId = item?.project_id || item?.projects?.id || "";
+      const allocId = item?.allocation?.id || null;
+      const allocStatus = String(item?.allocation?.status || "").toUpperCase();
+      const isActiveAlloc = allocId && ["RESERVED", "PURCHASED"].includes(allocStatus);
+      const groupKey = isActiveAlloc ? `alloc:${allocId}` : `project:${projectId || "na"}`;
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          id: groupKey,
+          allocationId: isActiveAlloc ? allocId : null,
+          allocationStatus: isActiveAlloc ? allocStatus : null,
+          products: [],
+          requestedAt: null,
+        });
+      }
+
+      const group = groups.get(groupKey);
+      const pn = item?.project_products?.name || item?.product_name || "—";
+      const brand = item?.projects?.title || item?.brand_name || null;
       const itemDate = item?.reviewed_at || item?.created_at || null;
-
-      if (!group.allocationId && allocId)      group.allocationId = allocId;
-      if (!group.allocationStatus && allocSts) group.allocationStatus = allocSts;
-
-      const alreadyAdded = group.products.some((p) => p.name === pn);
+      const alreadyAdded = group.products.some((p) => p.name === pn && p.brand === brand);
       if (!alreadyAdded) group.products.push({ name: pn, brand });
 
       if (itemDate && new Date(itemDate) > new Date(group.requestedAt || 0)) {
@@ -477,7 +512,9 @@ const ParticipantDashboard = () => {
       }
     }
 
-    return [group];
+    return Array.from(groups.values()).sort(
+      (a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0)
+    );
   }, [appliedProjects]);
 
   const activeTabCount = useMemo(() =>
@@ -525,6 +562,7 @@ const ParticipantDashboard = () => {
     const messages = {
       catalog:   "Browsing available products.",
       approved:  "Viewing your approved products.",
+      cancelled: "Viewing your cancelled products.",
       applied:   "Viewing your pending applications.",
       completed: "Viewing your completed campaigns.",
     };
@@ -532,13 +570,15 @@ const ParticipantDashboard = () => {
   };
 
   /* ── tabs ── */
-  const approvedProductCount = useMemo(() =>
-    appliedProjects.filter((item) => String(item?.status || "").toUpperCase() === "APPROVED").length
-  , [appliedProjects]);
+  const approvedProductCount = useMemo(
+    () => approvedRows.reduce((sum, row) => sum + (row.products?.length || 0), 0),
+    [approvedRows]
+  );
 
   const tabs = [
     { key: "catalog",   label: "Browse Products", count: filteredProducts.length },
     { key: "approved",  label: "Approved",         count: approvedProductCount },
+    { key: "cancelled", label: "Cancelled",        count: cancelledRows.length },
     { key: "applied",   label: "Applied",          count: appliedRows.length },
     { key: "completed", label: "Completed",        count: completedProjects.length },
   ];
@@ -797,20 +837,61 @@ const ParticipantDashboard = () => {
                     </div>
                     <StatusBadge status={row.allocationStatus || "APPROVED"} />
                     <div className="nd-list-card-action">
-                      {row.allocationId ? (
-                        <button
-                          type="button"
-                          className="nd-btn nd-btn--task"
-                          onClick={() => {
-                            addToast("Opening your task — submit your invoice and review there.", "info");
+                      <button
+                        type="button"
+                        className="nd-btn nd-btn--task"
+                        onClick={() => {
+                          addToast("Opening your task — submit your invoice and review there.", "info");
+                          if (row.allocationId) {
                             navigate(`${path("allocation/active")}?allocation=${row.allocationId}`);
-                          }}
-                        >
-                          Submit Invoice &amp; Review →
-                        </button>
-                      ) : (
-                        <span className="nd-chip nd-chip--waiting">⏳ Allocation Pending</span>
-                      )}
+                          } else {
+                            navigate(path("allocation/active"));
+                          }
+                        }}
+                      >
+                        Submit Invoice &amp; Review →
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ TAB: Cancelled ══ */}
+        {activeTab === "cancelled" && (
+          <div className="nd-tab-content">
+            {cancelledRows.length === 0 ? (
+              <EmptyState
+                icon="✕"
+                title="No cancelled products"
+                subtitle="Cancelled allocations will appear here."
+              />
+            ) : (
+              <div className="nd-list-cards">
+                {cancelledRows.map((item) => (
+                  <div key={item.id} className="nd-list-card nd-list-card--rejected">
+                    <div className="nd-list-card-icon">✕</div>
+                    <div className="nd-list-card-body">
+                      <h4>{item?.project_products?.name || item?.product_name || "—"}</h4>
+                      <span className="nd-list-card-project">{item?.projects?.title || "—"}</span>
+                      <span className="nd-list-card-date">
+                        Cancelled {formatDateTime(item?.allocation?.updated_at || item?.updated_at || item?.reviewed_at || item?.created_at)}
+                      </span>
+                    </div>
+                    <StatusBadge status="CANCELLED" />
+                    <div className="nd-list-card-action">
+                      <button
+                        type="button"
+                        className="nd-btn nd-btn--select"
+                        onClick={() => {
+                          handleTabChange("catalog");
+                          addToast("Go to Browse Products to reapply for this product.", "info");
+                        }}
+                      >
+                        Reapply from Browse
+                      </button>
                     </div>
                   </div>
                 ))}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   clearOauthHash,
@@ -26,7 +26,7 @@ const RoleSelection = () => {
           BRAND: `/brand/dashboard`,
         };
         navigate(routes[user.role] || "/login", { replace: true });
-      } catch (err) {
+      } catch {
         clearOauthHash();
         clearStoredTokens();
       }

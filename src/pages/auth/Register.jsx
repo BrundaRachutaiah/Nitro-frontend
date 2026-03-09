@@ -54,7 +54,6 @@ const Register = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   /* Google OAuth callback */
@@ -104,7 +103,7 @@ const Register = () => {
   const emailInvalid = emailTouched && email && !emailValid;
 
   const handleNext = () => {
-    setError(""); setSuccess("");
+    setError("");
     if (!fullName.trim())         { setError("Full name is required."); return; }
     if (!email.trim())            { setError("Email address is required."); return; }
     if (!emailValid)              { setEmailTouched(true); setError("Enter a valid email address (e.g. name@example.com)."); return; }
@@ -117,7 +116,7 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(""); setSuccess("");
+    setError("");
     if (!accountHolderName.trim() || !accountNumber.trim() || !confirmAccountNumber.trim() || !ifscCode.trim()) {
       setError("Account holder name, account number and IFSC code are required."); return;
     }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getMyAllocationTracking } from "../../api/allocation.api";
 import { uploadPurchaseProof } from "../../api/verification.api";

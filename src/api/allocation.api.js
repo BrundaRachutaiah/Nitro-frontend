@@ -26,3 +26,6 @@ export const savePaymentDetails = (payload) =>
 
 export const updateAllocationStatus = (allocationId, status) =>
   axios.patch(`/allocations/${allocationId}/status`, { status });
+
+export const cancelAllocation = (allocationId) =>
+  axios.patch(`/allocations/${allocationId}/cancel`);
