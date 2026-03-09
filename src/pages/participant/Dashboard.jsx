@@ -459,9 +459,19 @@ const ParticipantDashboard = () => {
   , [appliedProjects]);
 
   const approvedRows = useMemo(() => {
-    const approvedApps = appliedProjects.filter((item) =>
-      String(item?.status || "").toUpperCase() === "APPROVED"
-    );
+    // Only show APPROVED apps where:
+    // - The app status is APPROVED
+    // - AND the allocation is NOT cancelled (if allocation exists)
+    // Note: project.controller now returns active (RESERVED/PURCHASED) allocation first,
+    // so if allocation.status = CANCELLED it truly means no active allocation exists yet.
+    const approvedApps = appliedProjects.filter((item) => {
+      const appStatus = String(item?.status || "").toUpperCase();
+      if (appStatus !== "APPROVED") return false;
+      const allocStatus = String(item?.allocation?.status || "").toUpperCase();
+      // If there IS an allocation and it's cancelled, this app is stale — hide it
+      if (item?.allocation?.id && allocStatus === "CANCELLED") return false;
+      return true;
+    });
     if (!approvedApps.length) return [];
 
     const allocationId = approvedApps.find((item) => item?.allocation?.id)?.allocation?.id || null;
