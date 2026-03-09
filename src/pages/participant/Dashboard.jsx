@@ -458,63 +458,25 @@ const ParticipantDashboard = () => {
     })
   , [appliedProjects]);
 
-  /* Approved rows — latest per product, grouped by active allocation (if available) */
   const approvedRows = useMemo(() => {
-    const toMs = (v) => {
-      const ms = Date.parse(v || "");
-      return Number.isFinite(ms) ? ms : 0;
-    };
-
-    const latestByProduct = new Map();
-    for (const item of appliedProjects) {
-      const projectId = item?.project_id || item?.projects?.id || "";
-      const productId = item?.product_id || item?.project_products?.id || "";
-      if (!projectId || !productId) continue;
-      const key = `${projectId}::${productId}`;
-      const existing = latestByProduct.get(key);
-      const itemMs = Math.max(toMs(item?.reviewed_at), toMs(item?.created_at));
-      const existingMs = existing ? Math.max(toMs(existing?.reviewed_at), toMs(existing?.created_at)) : -1;
-      if (!existing || itemMs >= existingMs) latestByProduct.set(key, item);
-    }
-
-    const approvedLatest = Array.from(latestByProduct.values()).filter(
-      (item) => String(item?.status || "").toUpperCase() === "APPROVED"
+    const approvedApps = appliedProjects.filter((item) =>
+      String(item?.status || "").toUpperCase() === "APPROVED"
     );
-    if (!approvedLatest.length) return [];
+    if (!approvedApps.length) return [];
 
-    const groups = new Map();
-    for (const item of approvedLatest) {
-      const projectId = item?.project_id || item?.projects?.id || "";
-      const allocId = item?.allocation?.id || null;
-      const allocStatus = String(item?.allocation?.status || "").toUpperCase();
-      const isActiveAlloc = allocId && ["RESERVED", "PURCHASED"].includes(allocStatus);
-      const groupKey = isActiveAlloc ? `alloc:${allocId}` : `project:${projectId || "na"}`;
+    const allocationId = approvedApps.find((item) => item?.allocation?.id)?.allocation?.id || null;
+    const allocationStatus = approvedApps.find((item) => item?.allocation?.status)?.allocation?.status || "APPROVED";
 
-      if (!groups.has(groupKey)) {
-        groups.set(groupKey, {
-          id: groupKey,
-          allocationId: isActiveAlloc ? allocId : null,
-          allocationStatus: isActiveAlloc ? allocStatus : null,
-          products: [],
-          requestedAt: null,
-        });
-      }
-
-      const group = groups.get(groupKey);
-      const pn = item?.project_products?.name || item?.product_name || "—";
-      const brand = item?.projects?.title || item?.brand_name || null;
-      const itemDate = item?.reviewed_at || item?.created_at || null;
-      const alreadyAdded = group.products.some((p) => p.name === pn && p.brand === brand);
-      if (!alreadyAdded) group.products.push({ name: pn, brand });
-
-      if (itemDate && new Date(itemDate) > new Date(group.requestedAt || 0)) {
-        group.requestedAt = itemDate;
-      }
-    }
-
-    return Array.from(groups.values()).sort(
-      (a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0)
-    );
+    return [{
+      id: "all-approved",
+      allocationId,
+      allocationStatus,
+      products: approvedApps.map((item) => ({
+        name: item?.project_products?.name || item?.product_name || "—",
+        brand: item?.projects?.title || item?.project_title || "—",
+      })),
+      requestedAt: approvedApps[0]?.reviewed_at || approvedApps[0]?.created_at || null,
+    }];
   }, [appliedProjects]);
 
   const activeTabCount = useMemo(() =>
@@ -825,10 +787,7 @@ const ParticipantDashboard = () => {
                           <li key={idx} className="nd-approved-product-item">
                             <span className="nd-approved-product-index">{idx + 1}.</span>
                             <span className="nd-approved-product-info">
-                              <span className="nd-approved-product-name">{p.name}</span>
-                              {p.brand && (
-                                <span className="nd-approved-product-brand">{p.brand}</span>
-                              )}
+                              <span className="nd-approved-product-name">{p.name} — {p.brand || "—"}</span>
                             </span>
                           </li>
                         ))}
@@ -842,11 +801,7 @@ const ParticipantDashboard = () => {
                         className="nd-btn nd-btn--task"
                         onClick={() => {
                           addToast("Opening your task — submit your invoice and review there.", "info");
-                          if (row.allocationId) {
-                            navigate(`${path("allocation/active")}?allocation=${row.allocationId}`);
-                          } else {
-                            navigate(path("allocation/active"));
-                          }
+                          navigate(path("allocation/active"));
                         }}
                       >
                         Submit Invoice &amp; Review →

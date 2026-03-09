@@ -50,3 +50,6 @@ export const approveProductApplication = (id, payload = {}) =>
 
 export const rejectProductApplication = (id, payload = {}) =>
   axios.patch(`/admin/applications/${id}/reject`, payload);
+
+export const bulkDecideApplications = (decisions = []) =>
+  axios.post("/admin/applications/bulk-decide", { decisions });

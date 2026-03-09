@@ -6,6 +6,7 @@ import { submitReview, uploadReviewProofs } from "../../api/participant.api";
 import "./MyAllocations.css";
 
 const PURCHASE_KEY_PREFIX = "nitro_purchased_";
+const ACTIVE_ALLOCATION_STATUSES = ["RESERVED", "PURCHASED"];
 const fmt = (v) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(v || 0));
 const proofDone  = (p) => Boolean(p) && String(p?.status || "").toUpperCase() !== "REJECTED";
 const reviewDone = (r) => Boolean(r) && String(r?.status || "").toUpperCase() !== "REJECTED";
@@ -301,11 +302,9 @@ const MyAllocations = () => {
   const location = useLocation();
   const { id }   = useParams();
   const query    = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const queryAllocId = query.get("allocation");
   const showHistory  = query.get("view") === "history";
 
   const [data,      setData]      = useState([]);
-  const [activeId,  setActiveId]  = useState("");
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState("");
   const [saving,    setSaving]    = useState(false);
@@ -337,50 +336,30 @@ const MyAllocations = () => {
         const res  = await getMyAllocationTracking();
         const rows = Array.isArray(res.data?.data) ? res.data.data : [];
         setData(rows);
-        if (rows.length) {
-          const match  = queryAllocId && rows.find((r) => r.id === queryAllocId);
-          const active = rows.find((r) => ["RESERVED","PURCHASED"].includes(String(r?.status||"").toUpperCase()));
-          setActiveId(match?.id || active?.id || rows[0].id);
-        }
       } catch (err) { setError(err.response?.data?.message || "Failed to load tasks."); }
       finally { setLoading(false); }
     })();
-  }, [queryAllocId]);
+  }, []);
 
-  const ACTIVE      = ["RESERVED","PURCHASED"];
-  const currentData = useMemo(() => data.filter((r) => ACTIVE.includes(String(r?.status||"").toUpperCase())), [data]);
-  const historyData = useMemo(() => data.filter((r) => !ACTIVE.includes(String(r?.status||"").toUpperCase())), [data]);
-  const viewData    = showHistory ? historyData : currentData;
-
-  const active = useMemo(() =>
-    viewData.find((r) => r.id === activeId) || data.find((r) => r.id === activeId) || viewData[0] || data[0] || null
-  , [activeId, viewData, data]);
-
-  const products    = useMemo(() => {
-    // Merge selected_products from ALL active allocations into one list
-    // so "Confirm Your Purchase" shows every product across all campaigns
-    const allActive = data.filter((r) => ACTIVE.includes(String(r?.status || "").toUpperCase()));
-    const merged = [];
-    for (const alloc of allActive) {
-      const prods = Array.isArray(alloc?.selected_products) ? alloc.selected_products : [];
-      for (const p of prods) {
-        // Tag each product with its source allocation id for upload/review calls
-        merged.push({ ...p, _allocationId: alloc.id });
-      }
-    }
-    return merged;
-  }, [data, ACTIVE]);
+  const historyData = useMemo(() => data.filter((r) => !ACTIVE_ALLOCATION_STATUSES.includes(String(r?.status || "").toUpperCase())), [data]);
+  const active = useMemo(() => (
+    data.find((r) => ACTIVE_ALLOCATION_STATUSES.includes(String(r?.status || "").toUpperCase())) || data[0] || null
+  ), [data]);
+  const viewData = showHistory ? historyData : (active ? [active] : []);
+  const products = useMemo(() => (
+    Array.isArray(active?.selected_products) ? active.selected_products : []
+  ), [active]);
   const status      = String(active?.status || "RESERVED").toUpperCase();
   const isCompleted = status === "COMPLETED";
   const isPurchaseConfirmed = useMemo(() => {
-    const allActive = data.filter((r) => ACTIVE.includes(String(r?.status || "").toUpperCase()));
-    return allActive.length > 0 && allActive.every((r) =>
-      Boolean(purchased[r.id]) ||
-      String(r?.status || "").toUpperCase() === "PURCHASED" ||
-      String(r?.status || "").toUpperCase() === "COMPLETED" ||
-      (Array.isArray(r?.selected_products) && r.selected_products.some((p) => proofDone(p.purchase_proof)))
+    if (!active?.id) return false;
+    return (
+      Boolean(purchased[active.id]) ||
+      String(active?.status || "").toUpperCase() === "PURCHASED" ||
+      String(active?.status || "").toUpperCase() === "COMPLETED" ||
+      products.some((p) => proofDone(p.purchase_proof))
     );
-  }, [data, purchased, ACTIVE]);
+  }, [active, purchased, products]);
   const project     = active?.projects || {};
   const projectName = project.title || project.name || "Campaign";
   const totalValue  = products.reduce((s, p) => s + Number(p?.product_value || 0), 0);
@@ -390,6 +369,8 @@ const MyAllocations = () => {
   const anyUploaded = products.some((p) => proofDone(p.purchase_proof) || reviewDone(p.review_submission));
 
   const timeLeft = useMemo(() => {
+    const _nowTick = tick;
+    void _nowTick;
     if (isCompleted || !active?.reserved_until) return { d:0, h:0, m:0, s:0 };
     let diff = Math.max(0, new Date(active.reserved_until).getTime() - Date.now());
     const d = Math.floor(diff / 864e5); diff -= d * 864e5;
@@ -407,17 +388,14 @@ const MyAllocations = () => {
   };
 
   const confirmPurchase = async () => {
-    if (saving) return;
-    // Mark ALL active allocations as PURCHASED
-    const allActive = data.filter((r) => ACTIVE.includes(String(r?.status || "").toUpperCase()));
-    const newPurchased = { ...purchased };
-    allActive.forEach((r) => { newPurchased[r.id] = true; });
-    setPurchased(newPurchased);
+    if (saving || !active?.id) return;
+    const allocationId = active.id;
+    setPurchased((prev) => ({ ...prev, [allocationId]: true }));
     setSaving(true);
     try {
-      await Promise.all(allActive.map((r) => updateAllocationStatus(r.id, "PURCHASED")));
+      await updateAllocationStatus(allocationId, "PURCHASED");
       setData((prev) => prev.map((r) =>
-        ACTIVE.includes(String(r?.status || "").toUpperCase()) ? { ...r, status: "PURCHASED" } : r
+        r.id === allocationId ? { ...r, status: "PURCHASED" } : r
       ));
     } catch (err) { setError(err.response?.data?.message || "Could not update status."); }
     finally { setSaving(false); }
@@ -457,23 +435,21 @@ const MyAllocations = () => {
 
   const history = useMemo(() => {
     const rows = [];
-    // Collect history from ALL active allocations, not just the focused one
-    const allActive = data.filter((r) => ACTIVE.includes(String(r?.status || "").toUpperCase()));
-    allActive.forEach((alloc) => {
-      const prods = Array.isArray(alloc?.selected_products) ? alloc.selected_products : [null];
-      prods.forEach((p, i) => {
-        const proof    = p?.purchase_proof    || (p === null ? alloc?.purchase_proof    : null);
-        const review   = p?.review_submission || (p === null ? alloc?.review_submission : null);
-        const feedback = p?.feedback_submission || (p === null ? alloc?.feedback_submission : null);
-        const pname    = p?.product_name ? ` · ${p.product_name}` : "";
-        const key      = `${alloc.id}-${i}`;
-        if (proof?.created_at)    rows.push({ key:`proof-${key}`,    at: proof.created_at,    label: `Invoice Uploaded${pname}`,    status: statusOf(proof) });
-        if (review?.created_at)   rows.push({ key:`review-${key}`,   at: review.created_at,   label: `Review Submitted${pname}`,   status: statusOf(review) });
-        if (feedback?.created_at) rows.push({ key:`feedback-${key}`, at: feedback.created_at, label: `Feedback Submitted${pname}`, status: "SUBMITTED" });
-      });
+    if (!active) return rows;
+
+    const prods = Array.isArray(active?.selected_products) ? active.selected_products : [null];
+    prods.forEach((p, i) => {
+      const proof    = p?.purchase_proof    || (p === null ? active?.purchase_proof    : null);
+      const review   = p?.review_submission || (p === null ? active?.review_submission : null);
+      const feedback = p?.feedback_submission || (p === null ? active?.feedback_submission : null);
+      const pname    = p?.product_name ? ` · ${p.product_name}` : "";
+      const key      = `${active.id}-${i}`;
+      if (proof?.created_at)    rows.push({ key:`proof-${key}`,    at: proof.created_at,    label: `Invoice Uploaded${pname}`,    status: statusOf(proof) });
+      if (review?.created_at)   rows.push({ key:`review-${key}`,   at: review.created_at,   label: `Review Submitted${pname}`,   status: statusOf(review) });
+      if (feedback?.created_at) rows.push({ key:`feedback-${key}`, at: feedback.created_at, label: `Feedback Submitted${pname}`, status: "SUBMITTED" });
     });
     return rows.sort((a, b) => new Date(b.at) - new Date(a.at));
-  }, [data, ACTIVE]);
+  }, [active]);
 
   const chipColor = (s) => ({ APPROVED:"#22c55e", PENDING:"#f59e0b", REJECTED:"#ef4444", SUBMITTED:"#3b82f6", COMPLETED:"#10b981", PURCHASED:"#06b6d4", RESERVED:"#06b6d4", EXPIRED:"#f97316", CANCELLED:"#e74c3c" }[s] || "#94a3b8");
 
@@ -527,25 +503,8 @@ const MyAllocations = () => {
             <aside className="ma-sidebar">
               <div className="ma-panel">
                 <div className="ma-panel-label">📋 Campaign</div>
-                {viewData.length > 1 ? (
-                  <div className="ma-switcher">
-                    {viewData.map((r) => {
-                      const name = r?.projects?.title || r?.projects?.name || "Untitled";
-                      const s = String(r?.status||"").toUpperCase();
-                      return (
-                        <button key={r.id} type="button" className={`ma-switch-btn ${r.id === active?.id ? "active" : ""}`} onClick={() => { setActiveId(r.id); setPanel(null); }}>
-                          <span className="ma-switch-name">{name}</span>
-                          <span className="ma-switch-chip" style={{ color: chipColor(s) }}>{s}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <>
-                    <div className="ma-campaign-name">{projectName}</div>
-                    <span className="ma-status-chip" style={{ background:`${chipColor(status)}22`, color:chipColor(status), border:`1px solid ${chipColor(status)}55` }}>{status}</span>
-                  </>
-                )}
+                <div className="ma-campaign-name">{projectName}</div>
+                <span className="ma-status-chip" style={{ background:`${chipColor(status)}22`, color:chipColor(status), border:`1px solid ${chipColor(status)}55` }}>{status}</span>
               </div>
 
               {!showHistory && !isCompleted && (
@@ -634,6 +593,9 @@ const MyAllocations = () => {
                         <div key={p.product_id || i} className="ma-product-row">
                           <div className="ma-product-row-name">
                             <span>{p.product_name || "Product"}</span>
+                            <small style={{ display: "block", color: "#9aa3b2" }}>
+                              {p?.project_title || p?.projects?.title || projectName}
+                            </small>
                             {p.product_url && (
                               <a
                                 href={p.product_url}
@@ -678,6 +640,9 @@ const MyAllocations = () => {
                           <div className="ma-prod-num">{iDone && rDone ? "✓" : i + 1}</div>
                           <div className="ma-prod-body">
                             <div className="ma-prod-name">{prod.product_name || "Product"}</div>
+                            <div className="ma-prod-price" style={{ marginTop: "-2px", marginBottom: "6px", fontSize: "12px", color: "#9aa3b2" }}>
+                              {prod?.project_title || prod?.projects?.title || projectName}
+                            </div>
                             <div className="ma-prod-price">{fmt(prod.product_value)}</div>
                             <div className="ma-prod-steps">
                               {/* Invoice */}
