@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createProject } from "../../api/project.api";
 
-const blankProduct = { name: "", product_url: "", image_url: "", price: "" };
+const blankProduct = { name: "", product_url: "", price: "" };
 
 /* ─── Icons ── */
 const Icon = ({ name, size = 16 }) => {
@@ -89,7 +89,7 @@ const ProjectForm = ({ onSuccess }) => {
     if (Number(form.reward) <= 0) { setError("Allocated budget must be greater than 0."); return; }
 
     const cleanedProducts = form.products
-      .map(p => ({ name: p.name.trim(), product_url: p.product_url.trim(), image_url: p.image_url.trim(), price: Number(p.price || 0), product_value: Number(p.price || 0) }))
+      .map(p => ({ name: p.name.trim(), product_url: p.product_url.trim(), price: Number(p.price || 0), product_value: Number(p.price || 0) }))
       .filter(p => p.name && p.product_url);
 
     if (!cleanedProducts.length) { setError("Please add at least one product with a name and URL."); return; }
@@ -260,85 +260,107 @@ const ProjectForm = ({ onSuccess }) => {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className="cpf-step-badge">Step 3</span>
-            <button
-              type="button"
-              className="cpf-add-btn"
-              onClick={addProduct}
-            >
+            <button type="button" className="cpf-add-btn" onClick={addProduct}>
               <Icon name="plus" size={14} /> Add Product
             </button>
           </div>
         </div>
 
-        {/* Column headers */}
-        <div className="cpf-product-header">
-          <span>Product Name <span className="cpf-required">*</span></span>
-          <span>Product URL <span className="cpf-required">*</span></span>
-          <span>Image URL <span className="cpf-hint">(optional)</span></span>
-          <span>Price (INR)</span>
-          <span></span>
-        </div>
-
-        <div className="cpf-products-list">
+        <div className="cpf-product-cards">
           {form.products.map((product, idx) => (
-            <div key={`product-${idx}`} className="cpf-product-row">
-              <div className="cpf-input-wrap">
-                <span className="cpf-input-icon"><Icon name="package" size={13} /></span>
-                <input
-                  className="cpf-input cpf-input--icon"
-                  placeholder="e.g. Ghee Batti"
-                  value={product.name}
-                  onChange={e => updateProduct(idx, "name", e.target.value)}
-                />
+            <div key={`product-${idx}`} className="cpf-product-card">
+
+              {/* Card top — icon placeholder + remove button */}
+              <div className="cpf-card-top">
+                <div className="cpf-card-icon">
+                  <Icon name="package" size={22} />
+                </div>
+                <div className="cpf-card-num">#{idx + 1}</div>
+                <button
+                  type="button"
+                  className="cpf-remove-btn"
+                  onClick={() => removeProduct(idx)}
+                  disabled={form.products.length <= 1}
+                  title="Remove product"
+                >
+                  <Icon name="trash" size={14} />
+                </button>
               </div>
-              <div className="cpf-input-wrap">
-                <span className="cpf-input-icon"><Icon name="link" size={13} /></span>
-                <input
-                  className="cpf-input cpf-input--icon"
-                  placeholder="Amazon / Flipkart URL"
-                  value={product.product_url}
-                  onChange={e => updateProduct(idx, "product_url", e.target.value)}
-                />
+
+              {/* Card fields */}
+              <div className="cpf-card-fields">
+                <Field label="Product Name" required>
+                  <div className="cpf-input-wrap">
+                    <span className="cpf-input-icon"><Icon name="package" size={13} /></span>
+                    <input
+                      className="cpf-input cpf-input--icon"
+                      placeholder="e.g. Ghee Batti 500ml"
+                      value={product.name}
+                      onChange={e => updateProduct(idx, "name", e.target.value)}
+                    />
+                  </div>
+                </Field>
+
+                <Field label="Product URL" required>
+                  <div className="cpf-input-wrap">
+                    <span className="cpf-input-icon"><Icon name="link" size={13} /></span>
+                    <input
+                      className="cpf-input cpf-input--icon"
+                      placeholder="Amazon / Flipkart / brand URL"
+                      value={product.product_url}
+                      onChange={e => updateProduct(idx, "product_url", e.target.value)}
+                    />
+                  </div>
+                </Field>
+
+                <Field label="Price (INR)">
+                  <div className="cpf-input-wrap">
+                    <span className="cpf-input-icon"><Icon name="dollar" size={13} /></span>
+                    <input
+                      type="number"
+                      className="cpf-input cpf-input--icon"
+                      placeholder="0"
+                      min="0"
+                      value={product.price}
+                      onChange={e => updateProduct(idx, "price", e.target.value)}
+                    />
+                  </div>
+                </Field>
               </div>
-              <div className="cpf-input-wrap">
-                <span className="cpf-input-icon"><Icon name="image" size={13} /></span>
-                <input
-                  className="cpf-input cpf-input--icon"
-                  placeholder="https://…"
-                  value={product.image_url}
-                  onChange={e => updateProduct(idx, "image_url", e.target.value)}
-                />
-              </div>
-              <div className="cpf-input-wrap">
-                <span className="cpf-input-icon"><Icon name="dollar" size={13} /></span>
-                <input
-                  type="number"
-                  className="cpf-input cpf-input--icon"
-                  placeholder="0"
-                  min="0"
-                  value={product.price}
-                  onChange={e => updateProduct(idx, "price", e.target.value)}
-                />
-              </div>
-              <button
-                type="button"
-                className="cpf-remove-btn"
-                onClick={() => removeProduct(idx)}
-                disabled={form.products.length <= 1}
-                title="Remove product"
-              >
-                <Icon name="trash" size={14} />
-              </button>
+
+              {/* Card preview footer */}
+              {(product.name || product.product_url) && (
+                <div className="cpf-card-preview">
+                  {product.name && (
+                    <span className="cpf-card-preview-name">{product.name}</span>
+                  )}
+                  {product.price && (
+                    <span className="cpf-card-preview-price">₹{Number(product.price).toLocaleString("en-IN")}</span>
+                  )}
+                  {product.product_url && (
+                    <a
+                      href={product.product_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="cpf-card-preview-link"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <Icon name="link" size={11} /> View URL
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           ))}
-        </div>
 
-        {form.products.length === 0 && (
-          <div className="su-empty-state" style={{ padding: "24px" }}>
-            <Icon name="package" size={28} />
-            <p>No products added yet. Click "Add Product" to get started.</p>
-          </div>
-        )}
+          {/* Empty state */}
+          {form.products.length === 0 && (
+            <div className="cpf-products-empty">
+              <Icon name="package" size={28} />
+              <p>No products added yet. Click "Add Product" to get started.</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ══ Submit ══ */}

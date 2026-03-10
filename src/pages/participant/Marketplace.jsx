@@ -34,24 +34,21 @@ const formatNumber = (value) => {
   return num.toLocaleString("en-IN");
 };
 
-const getPreviewImage = (primaryUrl, fallbackSeed = "nitro-product") => {
-  const trimmed = String(primaryUrl || "").trim();
-  if (trimmed) {
-    if (/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(trimmed)) {
-      return trimmed;
-    }
-
-    try {
-      const hostname = new URL(trimmed).hostname;
-      if (hostname) {
-        return `https://logo.clearbit.com/${hostname}`;
-      }
-    } catch {
-      // Ignore malformed URL and use fallback.
-    }
+const getCategoryColor = (category) => {
+  const map = {
+    "baby care": ["#f59e0b","#d97706"],
+    "home essentials": ["#06b6d4","#0e7490"],
+    "skincare": ["#ec4899","#be185d"],
+    "haircare": ["#8b5cf6","#6d28d9"],
+    "food": ["#10b981","#047857"],
+    "electronics": ["#6366f1","#4338ca"],
+    "fashion": ["#f43f5e","#be123c"],
+  };
+  const key = String(category || "").toLowerCase();
+  for (const [k, v] of Object.entries(map)) {
+    if (key.includes(k)) return v;
   }
-
-  return `https://picsum.photos/seed/${encodeURIComponent(fallbackSeed)}/640/420`;
+  return ["#17c8ef","#0e7490"];
 };
 
 const Marketplace = () => {
@@ -394,11 +391,28 @@ const Marketplace = () => {
             return (
               <article key={project.id} className="participant-marketplace-card">
                 <div className="participant-marketplace-card-image">
-                  <img
-                    src={getPreviewImage(project?.product_url, `${project?.id || title}-marketplace`)}
-                    alt={title}
-                    loading="lazy"
-                  />
+                  {(() => {
+                    const [c1, c2] = getCategoryColor(project?.category);
+                    const initials = String(project?.title || "P").trim().slice(0, 2).toUpperCase();
+                    return (
+                      <div style={{
+                        width: "100%", height: "100%",
+                        background: `linear-gradient(135deg, ${c1}18 0%, ${c2}30 100%)`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <div style={{
+                          width: 52, height: 52, borderRadius: 14,
+                          background: `linear-gradient(135deg, ${c1}40, ${c2}60)`,
+                          border: `1.5px solid ${c1}50`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: "1.1rem", fontWeight: 800, color: "#fff",
+                          boxShadow: `0 4px 16px ${c1}30`,
+                        }}>
+                          {initials}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <h3>{title}</h3>
                 <p>Request access to view products and continue.</p>
@@ -498,12 +512,22 @@ const Marketplace = () => {
                   {displayProducts.map((product) => (
                     <tr key={product.id}>
                       <td>
-                        <img
-                          className="participant-products-thumb"
-                          src={getPreviewImage(product?.image_url || product?.product_url, `${product?.id || product?.name}-thumb`)}
-                          alt={product?.name || "Product"}
-                          loading="lazy"
-                        />
+                        {(() => {
+                          const [c1, c2] = getCategoryColor(selectedProject?.category);
+                          const initials = String(product?.name || "P").trim().slice(0, 2).toUpperCase();
+                          return (
+                            <div style={{
+                              width: 44, height: 44, borderRadius: 10,
+                              background: `linear-gradient(135deg, ${c1}40, ${c2}60)`,
+                              border: `1.5px solid ${c1}50`,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: "0.82rem", fontWeight: 800, color: "#fff",
+                              flexShrink: 0,
+                            }}>
+                              {initials}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td>{product.name}</td>
                       <td>

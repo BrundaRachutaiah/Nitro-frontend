@@ -22,16 +22,21 @@ const fetchJson = async (path, token, options = {}) => {
   return data;
 };
 
-const getPreviewImage = (primaryUrl, fallbackSeed = "nitro-product") => {
-  const trimmed = String(primaryUrl || "").trim();
-  if (trimmed) {
-    if (/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(trimmed)) return trimmed;
-    try {
-      const hostname = new URL(trimmed).hostname;
-      if (hostname) return `https://logo.clearbit.com/${hostname}`;
-    } catch { /* ignore */ }
+const getCategoryColor = (category) => {
+  const map = {
+    "baby care": ["#f59e0b","#d97706"],
+    "home essentials": ["#06b6d4","#0e7490"],
+    "skincare": ["#ec4899","#be185d"],
+    "haircare": ["#8b5cf6","#6d28d9"],
+    "food": ["#10b981","#047857"],
+    "electronics": ["#6366f1","#4338ca"],
+    "fashion": ["#f43f5e","#be123c"],
+  };
+  const key = String(category || "").toLowerCase();
+  for (const [k, v] of Object.entries(map)) {
+    if (key.includes(k)) return v;
   }
-  return `https://picsum.photos/seed/${encodeURIComponent(fallbackSeed)}/400/300`;
+  return ["#17c8ef","#0e7490"];
 };
 
 const getLatestProductApplication = (appliedProjects, productId) => {
@@ -181,13 +186,36 @@ const ProductCard = ({ item, isSelected, latestApplication, onSelect, onNavigate
         cardState === "COMPLETED" ? "nd-product-card--done"      : "",
       ].filter(Boolean).join(" ")}
     >
-      {/* ── Image ── */}
-      <div className="nd-card-img" onClick={() => openProductLink(item?.product_url)}>
-        <img
-          src={getPreviewImage(item?.image_url || item?.product_url, item.selection_key)}
-          alt={item?.name || "Product"}
-          loading="lazy"
-        />
+      {/* ── Icon placeholder (no image) ── */}
+      <div
+        className="nd-card-img"
+        onClick={() => openProductLink(item?.product_url)}
+        style={{ cursor: item?.product_url ? "pointer" : "default" }}
+      >
+        {(() => {
+          const [c1, c2] = getCategoryColor(item?.project_category);
+          const initials = String(item?.name || "P").trim().slice(0, 2).toUpperCase();
+          return (
+            <div style={{
+              width: "100%", height: "100%",
+              background: `linear-gradient(135deg, ${c1}18 0%, ${c2}30 100%)`,
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", gap: 8,
+            }}>
+              <div style={{
+                width: 52, height: 52, borderRadius: 14,
+                background: `linear-gradient(135deg, ${c1}40, ${c2}60)`,
+                border: `1.5px solid ${c1}50`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "1.15rem", fontWeight: 800, color: "#fff",
+                letterSpacing: "-0.02em",
+                boxShadow: `0 4px 16px ${c1}30`,
+              }}>
+                {initials}
+              </div>
+            </div>
+          );
+        })()}
         <span className="nd-card-category">{item?.project_category || "General"}</span>
         {isSelected && <div className="nd-card-check">✓</div>}
       </div>

@@ -9,10 +9,11 @@ import {
   storeToken,
 } from "../../lib/auth";
 import { savePaymentDetails } from "../../api/allocation.api";
+import Footer from "../../components/common/Footer";
 
 const SIGNUP_COOLDOWN_UNTIL_KEY = "nitro_signup_cooldown_until";
-
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v).trim());
+const isValidPAN  = (v) => /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(String(v).trim());
 
 const EyeOpen = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -31,29 +32,145 @@ const CheckIcon = () => (
   </svg>
 );
 
+/* ── Confirmation Modal ── */
+const ConfirmModal = ({ data, onConfirm, onEdit, submitting }) => {
+  const maskAcc = (n) => (!n || n.length < 4) ? n : "*".repeat(n.length - 4) + n.slice(-4);
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem",background:"rgba(4,13,18,0.88)",backdropFilter:"blur(6px)"}}>
+      <div style={{background:"linear-gradient(160deg,rgba(0,198,255,0.09) 0%,rgba(4,13,18,0.98) 60%)",border:"1.5px solid rgba(0,198,255,0.25)",borderRadius:"22px",padding:"2rem 1.75rem",maxWidth:"480px",width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 0 60px rgba(0,198,255,0.12),0 24px 64px rgba(0,0,0,0.6)"}}>
+        
+        {/* header */}
+        <div style={{textAlign:"center",marginBottom:"1.5rem"}}>
+          <div style={{width:52,height:52,borderRadius:"50%",background:"rgba(0,198,255,0.12)",border:"1.5px solid rgba(0,198,255,0.3)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto .9rem",fontSize:"1.4rem"}}>✓</div>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:"1.2rem",fontWeight:800,color:"#e8f7ff",marginBottom:".3rem"}}>Review Your Details</div>
+          <div style={{fontSize:".8rem",color:"rgba(255,255,255,.38)"}}>Please verify before submitting. Click Edit to go back and change anything.</div>
+        </div>
+
+        {/* Personal */}
+        <div style={{marginBottom:"1rem"}}>
+          <div style={{fontSize:".68rem",fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:"rgba(255,255,255,.3)",marginBottom:".6rem"}}>👤 Personal</div>
+          <div style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",borderRadius:12,padding:".85rem 1rem",display:"flex",flexDirection:"column",gap:".45rem"}}>
+            {[["Full Name", data.fullName],["Email", data.email],["Phone", data.phone]].map(([l,v])=>(
+              <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:".82rem",borderBottom:"1px dashed rgba(255,255,255,.06)",paddingBottom:".35rem"}}>
+                <span style={{color:"rgba(255,255,255,.38)"}}>{l}</span>
+                <span style={{color:"rgba(255,255,255,.85)",fontWeight:500}}>{v||"—"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Address */}
+        <div style={{marginBottom:"1rem"}}>
+          <div style={{fontSize:".68rem",fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:"rgba(255,255,255,.3)",marginBottom:".6rem"}}>📍 Address</div>
+          <div style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",borderRadius:12,padding:".85rem 1rem",display:"flex",flexDirection:"column",gap:".45rem"}}>
+            {[
+              ["Line 1", data.address_line1],
+              ["Line 2", data.address_line2||"—"],
+              ["City", data.city],
+              ["State", data.state],
+              ["Pincode", data.pincode],
+              ["Country", data.country||"India"],
+            ].map(([l,v])=>(
+              <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:".82rem",borderBottom:"1px dashed rgba(255,255,255,.06)",paddingBottom:".35rem"}}>
+                <span style={{color:"rgba(255,255,255,.38)"}}>{l}</span>
+                <span style={{color:"rgba(255,255,255,.85)",fontWeight:500}}>{v||"—"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bank */}
+        <div style={{marginBottom:"1rem"}}>
+          <div style={{fontSize:".68rem",fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:"rgba(255,255,255,.3)",marginBottom:".6rem"}}>🏦 Bank</div>
+          <div style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",borderRadius:12,padding:".85rem 1rem",display:"flex",flexDirection:"column",gap:".45rem"}}>
+            {[
+              ["Holder Name", data.accountHolderName],
+              ["Account No.", maskAcc(data.accountNumber)],
+              ["IFSC", data.ifscCode],
+              ["Account Type", data.accountType],
+            ].map(([l,v])=>(
+              <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:".82rem",borderBottom:"1px dashed rgba(255,255,255,.06)",paddingBottom:".35rem"}}>
+                <span style={{color:"rgba(255,255,255,.38)"}}>{l}</span>
+                <span style={{color:"rgba(255,255,255,.85)",fontWeight:500,fontFamily:l==="Account No."?"monospace":"inherit"}}>{v||"—"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* KYC */}
+        <div style={{marginBottom:"1.5rem"}}>
+          <div style={{fontSize:".68rem",fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:"rgba(255,255,255,.3)",marginBottom:".6rem"}}>🪪 KYC</div>
+          <div style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",borderRadius:12,padding:".85rem 1rem"}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:".82rem"}}>
+              <span style={{color:"rgba(255,255,255,.38)"}}>PAN Number</span>
+              <span style={{color:"#00c6ff",fontWeight:700,fontFamily:"monospace",letterSpacing:".1em"}}>{data.panNumber||"—"}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* warning */}
+        <div style={{background:"rgba(255,159,0,.08)",border:"1px solid rgba(255,159,0,.25)",borderRadius:10,padding:".75rem 1rem",display:"flex",gap:".6rem",marginBottom:"1.5rem",fontSize:".78rem",color:"rgba(255,210,120,.8)"}}>
+          <span style={{flexShrink:0}}>⚠️</span>
+          <span>Incorrect bank or PAN details may delay payouts. Please double-check before confirming.</span>
+        </div>
+
+        {/* actions */}
+        <div style={{display:"flex",gap:".75rem"}}>
+          <button type="button" disabled={submitting}
+            onClick={onEdit}
+            style={{flex:1,padding:".82rem",borderRadius:11,border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.05)",color:"rgba(255,255,255,.6)",fontSize:".88rem",fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+            ✏️ Edit
+          </button>
+          <button type="button" disabled={submitting}
+            onClick={onConfirm}
+            style={{flex:1.6,padding:".82rem",borderRadius:11,border:"none",background:"#00c6ff",color:"#040d12",fontSize:".88rem",fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",boxShadow:"0 0 24px rgba(0,198,255,.3)"}}>
+            {submitting ? "Creating Account…" : "✓ Confirm & Submit"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Register = () => {
   const navigate = useNavigate();
 
+  // step: 1=Personal, 2=Bank, 3=KYC+Address, 4=Review(modal)
   const [step, setStep] = useState(1);
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [emailTouched, setEmailTouched] = useState(false);
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
+
+  // Step 1 — Personal
+  const [fullName, setFullName]               = useState("");
+  const [email, setEmail]                     = useState("");
+  const [emailTouched, setEmailTouched]       = useState(false);
+  const [phone, setPhone]                     = useState("");
+  const [password, setPassword]               = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [showCPw, setShowCPw] = useState(false);
+  const [showPw, setShowPw]                   = useState(false);
+  const [showCPw, setShowCPw]                 = useState(false);
 
-  const [accountHolderName, setAccountHolderName] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
-  const [confirmAccountNumber, setConfirmAccountNumber] = useState("");
-  const [ifscCode, setIfscCode] = useState("");
-  const [accountType, setAccountType] = useState("SAVINGS");
-  const [upiId, setUpiId] = useState("");
+  // Step 2 — Bank
+  const [accountHolderName, setAccountHolderName]         = useState("");
+  const [accountNumber, setAccountNumber]                 = useState("");
+  const [confirmAccountNumber, setConfirmAccountNumber]   = useState("");
+  const [ifscCode, setIfscCode]                           = useState("");
+  const [accountType, setAccountType]                     = useState("SAVINGS");
+  const [upiId, setUpiId]                                 = useState("");
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
-  const [error, setError] = useState("");
+  // Step 3 — Address + KYC
+  const [addressLine1, setAddressLine1] = useState("");
+  const [addressLine2, setAddressLine2] = useState("");
+  const [city, setCity]                 = useState("");
+  const [state, setState]               = useState("");
+  const [pincode, setPincode]           = useState("");
+  const [country, setCountry]           = useState("India");
+  const [panNumber, setPanNumber]       = useState("");
+  const [panTouched, setPanTouched]     = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  const [isSubmitting, setIsSubmitting]   = useState(false);
+  const [showConfirm, setShowConfirm]     = useState(false);
+  const [cooldown, setCooldown]           = useState(0);
+  const [error, setError]                 = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   /* Google OAuth callback */
@@ -89,7 +206,7 @@ const Register = () => {
   const pwStrength = (() => {
     if (!password) return 0;
     let s = 0;
-    if (password.length >= 6) s++;
+    if (password.length >= 6)  s++;
     if (password.length >= 10) s++;
     if (/[A-Z]/.test(password)) s++;
     if (/[0-9]/.test(password)) s++;
@@ -101,33 +218,57 @@ const Register = () => {
 
   const emailValid   = isValidEmail(email);
   const emailInvalid = emailTouched && email && !emailValid;
+  const panValid     = isValidPAN(panNumber);
+  const panInvalid   = panTouched && panNumber && !panValid;
 
-  const handleNext = () => {
+  /* ── Step navigation ── */
+  const handleStep1Next = () => {
     setError("");
-    if (!fullName.trim())         { setError("Full name is required."); return; }
-    if (!email.trim())            { setError("Email address is required."); return; }
-    if (!emailValid)              { setEmailTouched(true); setError("Enter a valid email address (e.g. name@example.com)."); return; }
-    if (!phone.trim())            { setError("Phone number is required."); return; }
-    if (!password)                { setError("Password is required."); return; }
-    if (password.length < 6)      { setError("Password must be at least 6 characters."); return; }
+    if (!fullName.trim())             { setError("Full name is required."); return; }
+    if (!email.trim())                { setError("Email address is required."); return; }
+    if (!emailValid)                  { setEmailTouched(true); setError("Enter a valid email address."); return; }
+    if (!phone.trim())                { setError("Phone number is required."); return; }
+    if (!password)                    { setError("Password is required."); return; }
+    if (password.length < 6)          { setError("Password must be at least 6 characters."); return; }
     if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     setStep(2);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleStep2Next = () => {
     setError("");
     if (!accountHolderName.trim() || !accountNumber.trim() || !confirmAccountNumber.trim() || !ifscCode.trim()) {
       setError("Account holder name, account number and IFSC code are required."); return;
     }
-    if (accountNumber.trim() !== confirmAccountNumber.trim()) { setError("Bank account numbers do not match."); return; }
-    if (cooldown > 0) { setError(`Too many attempts. Wait ${cooldown}s.`); return; }
+    if (accountNumber.trim() !== confirmAccountNumber.trim()) {
+      setError("Bank account numbers do not match."); return;
+    }
+    setStep(3);
+  };
 
+  const handleStep3Next = () => {
+    setError("");
+    if (!addressLine1.trim()) { setError("Address Line 1 is required."); return; }
+    if (!city.trim())         { setError("City is required."); return; }
+    if (!state.trim())        { setError("State is required."); return; }
+    if (!pincode.trim())      { setError("Pincode is required."); return; }
+    if (!panNumber.trim())    { setError("PAN card number is required."); return; }
+    setPanTouched(true);
+    if (!panValid) { setError("Invalid PAN format. Expected: ABCDE1234F"); return; }
+    if (!termsAccepted) { setError("You must accept the Terms & Conditions and Privacy Policy to continue."); return; }
+    setShowConfirm(true);
+  };
+
+  /* ── Final submit ── */
+  const handleConfirmSubmit = async () => {
+    if (cooldown > 0) { setError(`Too many attempts. Wait ${cooldown}s.`); return; }
     setIsSubmitting(true);
+    setError("");
     try {
       const signupData = await signUpWithSupabase({
-        email: email.trim(), password,
-        fullName: fullName.trim(), phone: phone.trim(),
+        email: email.trim(),
+        password,
+        fullName: fullName.trim(),
+        phone: phone.trim(),
         registrationDetails: {
           phone: phone.trim(),
           bank_details: {
@@ -137,53 +278,69 @@ const Register = () => {
             account_type: accountType,
             upi_id: upiId.trim() || null,
           },
-          terms_accepted: false, terms_accepted_at: null,
+          kyc: { pan_number: panNumber.trim().toUpperCase() },
+          address: {
+            address_line1: addressLine1.trim(),
+            address_line2: addressLine2.trim() || null,
+            city: city.trim(),
+            state: state.trim(),
+            pincode: pincode.trim(),
+            country: country.trim() || "India",
+          },
+          terms_accepted: true,
+          terms_accepted_at: new Date().toISOString(),
         },
       });
 
-      // ── Save bank details to backend database immediately after signup ──
+      // Save all details to backend immediately after signup
       const accessToken = signupData?.access_token || signupData?.session?.access_token;
       if (accessToken) {
         try {
-          // Temporarily store the token so axiosInstance can attach it
           storeToken(accessToken, false);
-          // Only pass bankDetails — address is empty at registration time.
-          // The backend now accepts bank-only saves (address fields are optional).
           await savePaymentDetails({
-            address: {},
+            address: {
+              address_line1: addressLine1.trim(),
+              address_line2: addressLine2.trim() || null,
+              city: city.trim(),
+              state: state.trim(),
+              pincode: pincode.trim(),
+              country: country.trim() || "India",
+            },
             bankDetails: {
               bank_account_name: accountHolderName.trim(),
               bank_account_number: accountNumber.trim(),
               bank_ifsc: ifscCode.trim().toUpperCase(),
               bank_name: accountType,
             },
+            kycDetails: {
+              pan_number: panNumber.trim().toUpperCase(),
+            },
           });
         } catch {
-          // Non-fatal: bank details can be updated later from Profile page
+          // Non-fatal: can be updated later from Profile page
         } finally {
-          // Clear the token — user must verify email before proper login
           import("../../lib/auth").then(({ clearStoredTokens }) => clearStoredTokens());
         }
       }
 
+      setShowConfirm(false);
       setShowSuccessModal(true);
     } catch (err) {
+      setShowConfirm(false);
       const raw = String(err?.message || "");
       const low = raw.toLowerCase();
       if (err?.status === 429 || low.includes("rate limit")) {
         const w = Number(err?.retryAfter) > 0 ? Number(err.retryAfter) : 60;
-        setCooldown(w); setError("Too many sign-up attempts. Please wait " + w + " seconds before trying again.");
+        setCooldown(w);
+        setError("Too many sign-up attempts. Please wait " + w + " seconds before trying again.");
       } else if (
         err?.code === "email_already_registered" ||
         err?.status === 409 ||
         low.includes("already registered") ||
         low.includes("already been registered") ||
         low.includes("user already registered") ||
-        low.includes("email already") ||
-        (low.includes("invalid") && low.includes("email"))
+        low.includes("email already")
       ) {
-        // Supabase returns 200 with identities=[] for duplicate emails,
-        // but can also leak "invalid email" message — both mean already registered.
         setError("This email address is already registered. Please sign in instead, or use a different email.");
       } else if (low.includes("password") && (low.includes("weak") || low.includes("strength"))) {
         setError("Your password is too weak. Use at least 8 characters with a mix of letters, numbers and symbols.");
@@ -198,6 +355,14 @@ const Register = () => {
   const handleGoogle = () => {
     try { window.location.href = getGoogleAuthorizeUrl(); }
     catch (err) { setError(err.message || "Google sign-up unavailable."); }
+  };
+
+  const confirmData = {
+    fullName, email, phone,
+    address_line1: addressLine1, address_line2: addressLine2,
+    city, state, pincode, country,
+    accountHolderName, accountNumber, ifscCode, accountType,
+    panNumber,
   };
 
   return (
@@ -224,15 +389,15 @@ const Register = () => {
         .rg-name{font-family:'Syne',sans-serif;font-weight:800;font-size:1.15rem;color:#fff;letter-spacing:-.02em;}
         .rg-by{font-size:.7rem;font-weight:300;color:rgba(255,255,255,.32);letter-spacing:.1em;text-transform:uppercase;}
         .rg-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:22px;padding:2.25rem 2rem;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);}
-        .rg-stepper{display:flex;align-items:center;margin-bottom:1.85rem;}
-        .rg-step{flex:1;display:flex;align-items:center;gap:.55rem;padding:.6rem .85rem;border-radius:10px;font-size:.8rem;font-weight:500;border:1px solid transparent;color:rgba(255,255,255,.28);transition:all .3s;cursor:default;}
+        .rg-stepper{display:flex;align-items:center;margin-bottom:1.85rem;gap:0;}
+        .rg-step{flex:1;display:flex;align-items:center;gap:.45rem;padding:.55rem .6rem;border-radius:10px;font-size:.72rem;font-weight:500;border:1px solid transparent;color:rgba(255,255,255,.28);transition:all .3s;cursor:default;}
         .rg-step.done{color:rgba(255,255,255,.45);}
         .rg-step.active{background:rgba(0,198,255,.1);border-color:rgba(0,198,255,.25);color:#00c6ff;}
-        .rg-step-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;flex-shrink:0;background:rgba(255,255,255,.08);transition:background .3s,color .3s;}
+        .rg-step-num{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0;background:rgba(255,255,255,.08);transition:background .3s,color .3s;}
         .rg-step.active .rg-step-num{background:#00c6ff;color:#040d12;}
         .rg-step.done  .rg-step-num{background:rgba(0,198,255,.25);color:#00c6ff;}
-        .rg-step-div{width:28px;height:1px;background:rgba(255,255,255,.1);flex-shrink:0;margin:0 .15rem;}
-        .rg-heading{font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800;color:#fff;letter-spacing:-.025em;margin-bottom:.3rem;}
+        .rg-step-div{width:16px;height:1px;background:rgba(255,255,255,.1);flex-shrink:0;}
+        .rg-heading{font-family:'Syne',sans-serif;font-size:1.55rem;font-weight:800;color:#fff;letter-spacing:-.025em;margin-bottom:.3rem;}
         .rg-sub{font-size:.845rem;font-weight:300;color:rgba(255,255,255,.38);margin-bottom:1.4rem;}
         .rg-google{width:100%;padding:.82rem 1rem;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.65rem;color:rgba(255,255,255,.82);font-size:.9rem;font-weight:500;font-family:'DM Sans',sans-serif;transition:background .25s,border-color .25s,transform .2s;margin-bottom:1.25rem;}
         .rg-google:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);transform:translateY(-2px);}
@@ -242,11 +407,10 @@ const Register = () => {
         .rg-div-txt{font-size:.75rem;color:rgba(255,255,255,.25);font-weight:300;white-space:nowrap;}
         .rg-alert{border-radius:12px;padding:.85rem 1rem;font-size:.85rem;margin-bottom:1.25rem;animation:rgU .3s ease both;display:flex;align-items:flex-start;gap:.6rem;line-height:1.45;}
         .rg-err{background:rgba(255,80,80,.12);border:1px solid rgba(255,80,80,.35);color:#ff8080;}
-        .rg-ok{background:rgba(0,229,160,.12);border:1px solid rgba(0,229,160,.35);color:#00e5a0;padding:1rem 1.1rem;font-size:.9rem;font-weight:500;}
-        .rg-ok-icon{font-size:1.2rem;flex-shrink:0;margin-top:.05rem;}
         .rg-fg{margin-bottom:1.1rem;}
         .rg-fg-last{margin-bottom:1.5rem;}
         .rg-lbl{display:block;font-size:.8rem;font-weight:500;color:rgba(255,255,255,.52);margin-bottom:.42rem;letter-spacing:.02em;}
+        .rg-req{color:#ff6b6b;margin-left:2px;}
         .rg-inp{width:100%;padding:.76rem 1rem;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:11px;color:#fff;font-size:.9rem;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .25s,box-shadow .25s,background .25s;}
         .rg-inp::placeholder{color:rgba(255,255,255,.2);}
         .rg-inp:focus{border-color:#00c6ff;box-shadow:0 0 0 3px rgba(0,198,255,.09);background:rgba(255,255,255,.07);}
@@ -276,7 +440,6 @@ const Register = () => {
         .rg-optional{display:inline-block;font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:2px 8px;border-radius:100px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.3);border:1px solid rgba(255,255,255,.08);margin-left:.45rem;vertical-align:middle;}
         .rg-btn-primary{width:100%;padding:.86rem 1rem;background:#00c6ff;border:none;border-radius:12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.93rem;font-weight:600;color:#040d12;letter-spacing:.01em;box-shadow:0 0 28px rgba(0,198,255,.28);transition:opacity .2s,transform .2s,box-shadow .2s;margin-top:.25rem;}
         .rg-btn-primary:hover:not(:disabled){opacity:.9;transform:translateY(-2px);box-shadow:0 6px 36px rgba(0,198,255,.35);}
-        .rg-btn-primary:active:not(:disabled){transform:translateY(0);}
         .rg-btn-primary:disabled{opacity:.45;cursor:not-allowed;}
         .rg-btn-ghost{width:100%;padding:.82rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:500;color:rgba(255,255,255,.5);transition:background .2s,border-color .2s;margin-top:.6rem;}
         .rg-btn-ghost:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18);color:rgba(255,255,255,.75);}
@@ -286,9 +449,9 @@ const Register = () => {
         .rg-foot a:hover{opacity:.75;}
         .rg-sc{display:none;}
         .rg-sc.active{display:block;animation:rgU .4s cubic-bezier(.22,1,.36,1) both;}
-
-        /* ── Success Modal ── */
-        .rg-modal-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:1.5rem;background:rgba(4,13,18,0.82);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:rgU .25s ease both;}
+        .rg-pan-note{font-size:.74rem;color:rgba(255,255,255,.28);margin-top:.38rem;display:flex;align-items:center;gap:.35rem;}
+        /* Success Modal */
+        .rg-modal-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:1.5rem;background:rgba(4,13,18,0.82);backdrop-filter:blur(6px);animation:rgU .25s ease both;}
         .rg-modal{background:linear-gradient(160deg,rgba(0,198,255,0.09) 0%,rgba(4,13,18,0.97) 55%);border:1.5px solid rgba(0,198,255,0.25);border-radius:24px;padding:2.5rem 2.25rem 2rem;max-width:420px;width:100%;text-align:center;box-shadow:0 0 60px rgba(0,198,255,0.12),0 24px 64px rgba(0,0,0,0.6);animation:modalPop .45s cubic-bezier(.22,1,.36,1) both;}
         @keyframes modalPop{from{opacity:0;transform:scale(.88) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
         .rg-modal-icon{width:64px;height:64px;border-radius:50%;background:rgba(0,198,255,0.1);border:1.5px solid rgba(0,198,255,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;}
@@ -320,16 +483,21 @@ const Register = () => {
           </div>
 
           <div className="rg-card">
-            {/* Stepper */}
+            {/* Stepper — 3 steps */}
             <div className="rg-stepper">
               <div className={`rg-step ${step === 1 ? "active" : "done"}`}>
                 <div className="rg-step-num">{step > 1 ? <CheckIcon/> : "1"}</div>
-                Personal Details
+                Personal
               </div>
               <div className="rg-step-div"/>
-              <div className={`rg-step ${step === 2 ? "active" : ""}`}>
-                <div className="rg-step-num">2</div>
-                Bank Details
+              <div className={`rg-step ${step === 2 ? "active" : step > 2 ? "done" : ""}`}>
+                <div className="rg-step-num">{step > 2 ? <CheckIcon/> : "2"}</div>
+                Bank
+              </div>
+              <div className="rg-step-div"/>
+              <div className={`rg-step ${step === 3 ? "active" : ""}`}>
+                <div className="rg-step-num">3</div>
+                KYC & Address
               </div>
             </div>
 
@@ -340,8 +508,7 @@ const Register = () => {
               </div>
             )}
 
-
-            {/* ── STEP 1 ── */}
+            {/* ── STEP 1: Personal ── */}
             <div className={`rg-sc ${step === 1 ? "active" : ""}`}>
               <h1 className="rg-heading">Create Account</h1>
               <p className="rg-sub">Sign up with Google or fill your details below.</p>
@@ -360,16 +527,14 @@ const Register = () => {
                 <div className="rg-div-line"/><span className="rg-div-txt">or register with email</span><div className="rg-div-line"/>
               </div>
 
-              {/* Full Name */}
               <div className="rg-fg">
-                <label htmlFor="fullName" className="rg-lbl">Full Name</label>
+                <label htmlFor="fullName" className="rg-lbl">Full Name <span className="rg-req">*</span></label>
                 <input id="fullName" type="text" className="rg-inp" value={fullName}
                   onChange={(e) => setFullName(e.target.value)} placeholder="Your full name" autoComplete="name"/>
               </div>
 
-              {/* Email with live validation */}
               <div className="rg-fg">
-                <label htmlFor="email" className="rg-lbl">Email Address</label>
+                <label htmlFor="email" className="rg-lbl">Email Address <span className="rg-req">*</span></label>
                 <input id="email" type="email"
                   className={`rg-inp ${emailTouched && email ? (emailValid ? "valid" : "invalid") : ""}`}
                   value={email}
@@ -396,16 +561,14 @@ const Register = () => {
                 )}
               </div>
 
-              {/* Phone */}
               <div className="rg-fg">
-                <label htmlFor="phone" className="rg-lbl">Phone Number</label>
+                <label htmlFor="phone" className="rg-lbl">Phone Number <span className="rg-req">*</span></label>
                 <input id="phone" type="tel" className="rg-inp" value={phone}
                   onChange={(e) => setPhone(e.target.value)} placeholder="10-digit mobile number" autoComplete="tel"/>
               </div>
 
-              {/* Password */}
               <div className="rg-fg">
-                <label htmlFor="password" className="rg-lbl">Password</label>
+                <label htmlFor="password" className="rg-lbl">Password <span className="rg-req">*</span></label>
                 <div className="rg-pw-wrap">
                   <input id="password" type={showPw ? "text" : "password"} className="rg-inp rg-inp-pw"
                     value={password} onChange={(e) => setPassword(e.target.value)}
@@ -424,9 +587,8 @@ const Register = () => {
                 )}
               </div>
 
-              {/* Confirm Password */}
               <div className="rg-fg rg-fg-last">
-                <label htmlFor="cpw" className="rg-lbl">Confirm Password</label>
+                <label htmlFor="cpw" className="rg-lbl">Confirm Password <span className="rg-req">*</span></label>
                 <div className="rg-pw-wrap">
                   <input id="cpw" type={showCPw ? "text" : "password"} className="rg-inp rg-inp-pw"
                     value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
@@ -440,76 +602,184 @@ const Register = () => {
                 )}
               </div>
 
-              <button type="button" className="rg-btn-primary" onClick={handleNext} disabled={cooldown > 0}>
+              <button type="button" className="rg-btn-primary" onClick={handleStep1Next} disabled={cooldown > 0}>
                 Continue to Bank Details →
               </button>
             </div>
 
-            {/* ── STEP 2 ── */}
+            {/* ── STEP 2: Bank ── */}
             <div className={`rg-sc ${step === 2 ? "active" : ""}`}>
-              <form onSubmit={handleSubmit} noValidate>
-                <h1 className="rg-heading">Bank Details</h1>
-                <p className="rg-sub">Required for payout processing. Kept securely.</p>
+              <h1 className="rg-heading">Bank Details</h1>
+              <p className="rg-sub">Required for payout processing. Kept securely.</p>
 
-                <div className="rg-sec-lbl">Account Info</div>
+              <div className="rg-sec-lbl">Account Info</div>
 
-                <div className="rg-fg">
-                  <label htmlFor="holderName" className="rg-lbl">Account Holder Name</label>
-                  <input id="holderName" type="text" className="rg-inp" value={accountHolderName}
-                    onChange={(e) => setAccountHolderName(e.target.value)} placeholder="Name as per bank account"/>
-                </div>
-                <div className="rg-fg">
-                  <label htmlFor="accNum" className="rg-lbl">Account Number</label>
-                  <input id="accNum" type="text" className="rg-inp" value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)} placeholder="Bank account number" autoComplete="off"/>
-                </div>
-                <div className="rg-fg">
-                  <label htmlFor="confAccNum" className="rg-lbl">Confirm Account Number</label>
-                  <input id="confAccNum" type="text" className="rg-inp" value={confirmAccountNumber}
-                    onChange={(e) => setConfirmAccountNumber(e.target.value)} placeholder="Re-enter account number" autoComplete="off"/>
-                  {confirmAccountNumber && (
-                    <div className={`rg-match ${confirmAccountNumber === accountNumber ? "rg-match-ok" : "rg-match-bad"}`}>
-                      {confirmAccountNumber === accountNumber ? "✓ Account numbers match" : "✗ Don't match"}
-                    </div>
-                  )}
-                </div>
-                <div className="rg-fg">
-                  <label htmlFor="ifsc" className="rg-lbl">IFSC Code</label>
-                  <input id="ifsc" type="text" className="rg-inp uc" value={ifscCode}
-                    onChange={(e) => setIfscCode(e.target.value.toUpperCase())} placeholder="e.g. HDFC0001234" autoComplete="off"/>
-                </div>
-                <div className="rg-fg">
-                  <label className="rg-lbl">Account Type</label>
-                  <div className="rg-type-group">
-                    {["SAVINGS","CURRENT"].map(t => (
-                      <button key={t} type="button" className={`rg-type-pill ${accountType === t ? "sel" : ""}`}
-                        onClick={() => setAccountType(t)}>{t.charAt(0)+t.slice(1).toLowerCase()}</button>
-                    ))}
+              <div className="rg-fg">
+                <label htmlFor="holderName" className="rg-lbl">Account Holder Name <span className="rg-req">*</span></label>
+                <input id="holderName" type="text" className="rg-inp" value={accountHolderName}
+                  onChange={(e) => setAccountHolderName(e.target.value)} placeholder="Name as per bank account"/>
+              </div>
+              <div className="rg-fg">
+                <label htmlFor="accNum" className="rg-lbl">Account Number <span className="rg-req">*</span></label>
+                <input id="accNum" type="text" className="rg-inp" value={accountNumber}
+                  onChange={(e) => setAccountNumber(e.target.value)} placeholder="Bank account number" autoComplete="off"/>
+              </div>
+              <div className="rg-fg">
+                <label htmlFor="confAccNum" className="rg-lbl">Confirm Account Number <span className="rg-req">*</span></label>
+                <input id="confAccNum" type="text" className="rg-inp" value={confirmAccountNumber}
+                  onChange={(e) => setConfirmAccountNumber(e.target.value)} placeholder="Re-enter account number" autoComplete="off"/>
+                {confirmAccountNumber && (
+                  <div className={`rg-match ${confirmAccountNumber === accountNumber ? "rg-match-ok" : "rg-match-bad"}`}>
+                    {confirmAccountNumber === accountNumber ? "✓ Account numbers match" : "✗ Don't match"}
                   </div>
+                )}
+              </div>
+              <div className="rg-fg">
+                <label htmlFor="ifsc" className="rg-lbl">IFSC Code <span className="rg-req">*</span></label>
+                <input id="ifsc" type="text" className="rg-inp uc" value={ifscCode}
+                  onChange={(e) => setIfscCode(e.target.value.toUpperCase())} placeholder="e.g. HDFC0001234" autoComplete="off"/>
+              </div>
+              <div className="rg-fg">
+                <label className="rg-lbl">Account Type</label>
+                <div className="rg-type-group">
+                  {["SAVINGS","CURRENT"].map(t => (
+                    <button key={t} type="button" className={`rg-type-pill ${accountType === t ? "sel" : ""}`}
+                      onClick={() => setAccountType(t)}>{t.charAt(0)+t.slice(1).toLowerCase()}</button>
+                  ))}
                 </div>
+              </div>
 
-                <div className="rg-sec-lbl" style={{ marginTop:"1.25rem" }}>
-                  UPI <span className="rg-optional">Optional</span>
-                </div>
-                <div className="rg-fg rg-fg-last">
-                  <label htmlFor="upi" className="rg-lbl">UPI ID</label>
-                  <input id="upi" type="text" className="rg-inp" value={upiId}
-                    onChange={(e) => setUpiId(e.target.value)} placeholder="name@upi"/>
-                </div>
+              <div className="rg-sec-lbl" style={{ marginTop:"1.25rem" }}>
+                UPI <span className="rg-optional">Optional</span>
+              </div>
+              <div className="rg-fg rg-fg-last">
+                <label htmlFor="upi" className="rg-lbl">UPI ID</label>
+                <input id="upi" type="text" className="rg-inp" value={upiId}
+                  onChange={(e) => setUpiId(e.target.value)} placeholder="name@upi"/>
+              </div>
 
-                <button type="submit" className="rg-btn-primary" disabled={isSubmitting || cooldown > 0}>
-                  {isSubmitting ? "Creating Account…" : cooldown > 0 ? `Try again in ${cooldown}s` : "Create Account"}
-                </button>
-                <button type="button" className="rg-btn-ghost" onClick={() => { setError(""); setStep(1); }} disabled={isSubmitting}>
-                  ← Back to Personal Details
-                </button>
-              </form>
+              <button type="button" className="rg-btn-primary" onClick={handleStep2Next}>
+                Continue to KYC & Address →
+              </button>
+              <button type="button" className="rg-btn-ghost" onClick={() => { setError(""); setStep(1); }}>
+                ← Back to Personal Details
+              </button>
+            </div>
+
+            {/* ── STEP 3: Address + KYC ── */}
+            <div className={`rg-sc ${step === 3 ? "active" : ""}`}>
+              <h1 className="rg-heading">KYC & Address</h1>
+              <p className="rg-sub">Required for product delivery and tax compliance.</p>
+
+              <div className="rg-sec-lbl">Delivery Address</div>
+
+              <div className="rg-fg">
+                <label htmlFor="addrLine1" className="rg-lbl">Address Line 1 <span className="rg-req">*</span></label>
+                <input id="addrLine1" type="text" className="rg-inp" value={addressLine1}
+                  onChange={(e) => setAddressLine1(e.target.value)} placeholder="House / Flat / Building no."/>
+              </div>
+              <div className="rg-fg">
+                <label htmlFor="addrLine2" className="rg-lbl">Address Line 2 <span className="rg-optional">Optional</span></label>
+                <input id="addrLine2" type="text" className="rg-inp" value={addressLine2}
+                  onChange={(e) => setAddressLine2(e.target.value)} placeholder="Street / Area / Landmark"/>
+              </div>
+              <div className="rg-fg">
+                <label htmlFor="city" className="rg-lbl">City <span className="rg-req">*</span></label>
+                <input id="city" type="text" className="rg-inp" value={city}
+                  onChange={(e) => setCity(e.target.value)} placeholder="e.g. Bengaluru"/>
+              </div>
+              <div className="rg-fg">
+                <label htmlFor="state" className="rg-lbl">State <span className="rg-req">*</span></label>
+                <input id="state" type="text" className="rg-inp" value={state}
+                  onChange={(e) => setState(e.target.value)} placeholder="e.g. Karnataka"/>
+              </div>
+              <div className="rg-fg">
+                <label htmlFor="pincode" className="rg-lbl">Pincode <span className="rg-req">*</span></label>
+                <input id="pincode" type="text" className="rg-inp" value={pincode}
+                  onChange={(e) => setPincode(e.target.value)} placeholder="6-digit pincode" maxLength={10}/>
+              </div>
+              <div className="rg-fg">
+                <label htmlFor="country" className="rg-lbl">Country</label>
+                <input id="country" type="text" className="rg-inp" value={country}
+                  onChange={(e) => setCountry(e.target.value)}/>
+              </div>
+
+              <div className="rg-sec-lbl" style={{ marginTop:"1.25rem" }}>KYC Details</div>
+
+              <div className="rg-fg rg-fg-last">
+                <label htmlFor="pan" className="rg-lbl">PAN Card Number <span className="rg-req">*</span></label>
+                <input id="pan" type="text"
+                  className={`rg-inp uc ${panTouched && panNumber ? (panValid ? "valid" : "invalid") : ""}`}
+                  value={panNumber}
+                  onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                  onBlur={() => setPanTouched(true)}
+                  placeholder="e.g. ABCDE1234F"
+                  maxLength={10}
+                  autoComplete="off"/>
+                {panInvalid && (
+                  <div className="rg-field-hint rg-hint-err">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    Invalid format. Expected: ABCDE1234F (5 letters + 4 digits + 1 letter)
+                  </div>
+                )}
+                {panTouched && panValid && (
+                  <div className="rg-field-hint rg-hint-ok">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                    Valid PAN format
+                  </div>
+                )}
+                <div className="rg-pan-note">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                  Required for tax compliance and payout processing
+                </div>
+              </div>
+
+              {/* Terms & Conditions checkbox */}
+              <div style={{ background: "rgba(255,255,255,.04)", border: `1px solid ${termsAccepted ? "rgba(0,198,255,.35)" : "rgba(255,255,255,.09)"}`, borderRadius: 12, padding: ".9rem 1rem", marginBottom: "1rem", transition: "border-color .25s", cursor: "pointer" }} onClick={() => setTermsAccepted(v => !v)}>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: ".75rem", cursor: "pointer" }}>
+                  <div style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${termsAccepted ? "#00c6ff" : "rgba(255,255,255,.25)"}`, background: termsAccepted ? "#00c6ff" : "transparent", flexShrink: 0, marginTop: 1, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .2s" }}>
+                    {termsAccepted && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#040d12" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                  </div>
+                  <span style={{ fontSize: ".82rem", color: "rgba(255,255,255,.55)", lineHeight: 1.5 }} onClick={e => e.stopPropagation()}>
+                    I have read and agree to the{" "}
+                    <a href="/terms-and-conditions" target="_blank" rel="noopener noreferrer"
+                      style={{ color: "#00c6ff", textDecoration: "none", fontWeight: 600 }}
+                      onClick={e => e.stopPropagation()}>
+                      Terms &amp; Conditions
+                    </a>
+                    {" "}and{" "}
+                    <a href="/privacy-policy" target="_blank" rel="noopener noreferrer"
+                      style={{ color: "#00c6ff", textDecoration: "none", fontWeight: 600 }}
+                      onClick={e => e.stopPropagation()}>
+                      Privacy Policy
+                    </a>
+                    , including the collection and use of my PAN and bank details for payout and tax purposes.
+                  </span>
+                </label>
+              </div>
+
+              <button type="button" className="rg-btn-primary" onClick={handleStep3Next} disabled={cooldown > 0 || !termsAccepted} style={{ opacity: termsAccepted ? 1 : 0.45 }}>
+                Review & Submit →
+              </button>
+              <button type="button" className="rg-btn-ghost" onClick={() => { setError(""); setStep(2); }}>
+                ← Back to Bank Details
+              </button>
             </div>
           </div>
 
           <p className="rg-foot">Already have an account?&nbsp;<Link to="/login/participant">Sign In</Link></p>
         </div>
       </div>
+
+      {/* ── Confirmation Modal ── */}
+      {showConfirm && (
+        <ConfirmModal
+          data={confirmData}
+          submitting={isSubmitting}
+          onConfirm={handleConfirmSubmit}
+          onEdit={() => { setShowConfirm(false); setError(""); }}
+        />
+      )}
 
       {/* ── Success Modal ── */}
       {showSuccessModal && (
@@ -554,6 +824,7 @@ const Register = () => {
           </div>
         </div>
       )}
+      <Footer variant="dark" />
     </>
   );
 };

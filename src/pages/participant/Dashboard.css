@@ -469,7 +469,7 @@
   position: relative;
   overflow: hidden;
   cursor: pointer;
-  background: linear-gradient(140deg, #122d3e, #0a1e2c);
+  background: transparent;
   flex-shrink: 0;
 }
 .nd-card-img img {

@@ -240,16 +240,43 @@ const ProductTask = () => {
             {/* ── LEFT SIDEBAR ── */}
             <aside className="pt-sidebar">
               {/* Campaign */}
-              <div className="pt-panel">
+              <div className="pt-panel pt-panel--campaign">
                 <div className="pt-panel-label">📋 Campaign</div>
+
                 {allocations.length > 1 ? (
                   <select className="pt-select" value={allocId} onChange={(e) => setAllocId(e.target.value)}>
                     {allocations.map((r) => <option key={r.id} value={r.id}>{r?.projects?.title || r?.projects?.name || r.id}</option>)}
                   </select>
-                ) : (
-                  <div className="pt-campaign-name">{selectedAlloc?.projects?.title || selectedAlloc?.projects?.name || "Campaign"}</div>
-                )}
-                <span className="pt-status-chip">{String(selectedAlloc?.status || "RESERVED").toUpperCase()}</span>
+                ) : (() => {
+                  // Collect all unique brands from selected_products
+                  const allBrands = [
+                    ...new Set(
+                      products
+                        .map((p) => String(p.project_title || p.brand || "").trim())
+                        .filter(Boolean)
+                    )
+                  ];
+                  // Fallback to allocation's own project name if no products yet
+                  const fallbackName = selectedAlloc?.projects?.title || selectedAlloc?.projects?.name || "Campaign";
+                  const displayBrands = allBrands.length > 0 ? allBrands : [fallbackName];
+
+                  return displayBrands.length === 1 ? (
+                    <div className="pt-campaign-name">{displayBrands[0]}</div>
+                  ) : (
+                    <div className="pt-brand-pills">
+                      {displayBrands.map((brand, i) => (
+                        <span key={i} className="pt-brand-pill">{brand}</span>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                <div className="pt-campaign-meta">
+                  <span className="pt-status-chip">{String(selectedAlloc?.status || "RESERVED").toUpperCase()}</span>
+                  {products.length > 0 && (
+                    <span className="pt-product-count">{products.length} product{products.length > 1 ? "s" : ""}</span>
+                  )}
+                </div>
               </div>
 
               {/* Product checklist */}

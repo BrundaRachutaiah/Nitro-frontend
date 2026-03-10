@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { getPaymentDetails, savePaymentDetails } from "../../api/allocation.api";
 import { getMyProfile, updateMyProfile } from "../../api/user.api";
 import { getStoredToken, requestEmailUpdateInSupabase } from "../../lib/auth";
+import Footer from "../../components/common/Footer";
 import "./Profile.css";
 
 const initialForm = {
@@ -20,7 +21,8 @@ const initialForm = {
   bank_account_name: "",
   bank_account_number: "",
   bank_ifsc: "",
-  bank_name: ""
+  bank_name: "",
+  pan_number: ""
 };
 
 const Profile = () => {
@@ -71,6 +73,7 @@ const Profile = () => {
           bank_account_number: details.bank_account_number || profile.bank_account_number || "",
           bank_ifsc:           details.bank_ifsc           || profile.bank_ifsc           || "",
           bank_name:           details.bank_name           || profile.bank_name           || "",
+          pan_number:          details.pan_number          || profile.pan_number          || "",
         };
 
         setForm(merged);
@@ -146,6 +149,9 @@ const Profile = () => {
           bank_account_number: form.bank_account_number,
           bank_ifsc: form.bank_ifsc,
           bank_name: form.bank_name
+        },
+        kycDetails: {
+          pan_number: form.pan_number ? form.pan_number.trim().toUpperCase() : ""
         }
       });
 
@@ -296,11 +302,28 @@ const Profile = () => {
                 </label>
                 <label>
                   IFSC Code
-                  <input value={form.bank_ifsc} onChange={(e) => setField("bank_ifsc", e.target.value)} readOnly={!editing} />
+                  <input value={form.bank_ifsc} onChange={(e) => setField("bank_ifsc", e.target.value.toUpperCase())} readOnly={!editing} />
                 </label>
                 <label>
                   Bank Name
                   <input value={form.bank_name} onChange={(e) => setField("bank_name", e.target.value)} readOnly={!editing} />
+                </label>
+              </div>
+            </section>
+
+            <section className="participant-profile-section">
+              <h2>KYC Details</h2>
+              <div className="participant-profile-grid">
+                <label>
+                  PAN Card Number
+                  <input
+                    value={form.pan_number}
+                    onChange={(e) => setField("pan_number", e.target.value.toUpperCase())}
+                    readOnly={!editing}
+                    maxLength={10}
+                    placeholder={editing ? "e.g. ABCDE1234F" : ""}
+                    style={{ fontFamily: "monospace", letterSpacing: "0.08em", fontWeight: 600 }}
+                  />
                 </label>
               </div>
             </section>
@@ -313,6 +336,7 @@ const Profile = () => {
           </form>
         ) : null}
       </main>
+      <Footer variant="teal" />
     </div>
   );
 };

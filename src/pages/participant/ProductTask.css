@@ -48,10 +48,19 @@
 /* ── Sidebar ── */
 .pt-sidebar { display: grid; gap: 0.9rem; }
 .pt-panel { background: rgba(13,45,57,0.88); border: 1px solid rgba(55,170,205,0.22); border-radius: 14px; padding: 1rem 1.1rem; display: grid; gap: 0.55rem; }
+.pt-panel--campaign { gap: 0.6rem; }
 .pt-panel-label { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; color: #4a9ab5; }
 .pt-campaign-name { font-weight: 800; font-size: 0.95rem; color: #d9f0f8; line-height: 1.35; }
 .pt-select { border: 1px solid rgba(35,150,184,0.4); background: rgba(18,54,67,0.8); color: #e9f6fb; border-radius: 10px; padding: 0.5rem 0.75rem; font-size: 0.88rem; height: 40px; width: 100%; }
+
+/* Multi-brand pills */
+.pt-brand-pills { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.pt-brand-pill { display: inline-block; background: rgba(14,165,207,0.12); border: 1px solid rgba(14,165,207,0.30); color: #d9f0f8; border-radius: 999px; padding: 3px 11px; font-size: 0.78rem; font-weight: 700; line-height: 1.5; letter-spacing: 0.01em; }
+
+/* Status + count row */
+.pt-campaign-meta { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .pt-status-chip { display: inline-block; background: rgba(14,165,207,0.18); border: 1px solid rgba(14,165,207,0.35); color: #7fe0f5; border-radius: 999px; padding: 3px 10px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; width: fit-content; }
+.pt-product-count { font-size: 0.72rem; font-weight: 600; color: #5dade2; opacity: 0.85; }
 
 /* Product list */
 .pt-product-list { display: grid; gap: 0.45rem; }

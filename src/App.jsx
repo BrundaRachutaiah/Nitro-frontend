@@ -39,6 +39,8 @@ import AuditLogs from "./pages/superAdmin/AuditLogs";
 import CreateProject from "./pages/admin/CreateProject";
 import ClientBudgets from './pages/admin/ClientBudgets';
 import Support from "./pages/superAdmin/Support";
+import TermsAndConditions from "./pages/legal/TermsAndConditions";
+import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
 
 const RoleRoute = ({ allowedRoles, children }) => {
   const token = getStoredToken();
@@ -343,6 +345,8 @@ function App() {
       <Route path="/login/admin" element={<Login mode="admin" />} />
       <Route path="/login/participant" element={<Login mode="participant" />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/dashboard" element={<DashboardRoute />} />
       <Route path="/admin/:id/dashboard" element={<AdminDashboardRoute />} />
       <Route path="/super-admin/:id/dashboard" element={<SuperAdminDashboardRoute />} />
