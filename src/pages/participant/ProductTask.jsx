@@ -12,6 +12,8 @@ const fmt = (v) =>
 const proofIsDone   = (p) => Boolean(p) && String(p?.status || "").toUpperCase() !== "REJECTED";
 const reviewIsDone  = (r) => Boolean(r) && String(r?.status || "").toUpperCase() !== "REJECTED";
 const statusLabel   = (s) => String(s?.status || "PENDING").toUpperCase();
+const purchaseSourceLabel = (mode) =>
+  String(mode || "").toUpperCase() === "MARKETPLACE" ? "Amazon" : "brand website";
 
 const ProductTask = () => {
   const navigate  = useNavigate();
@@ -85,6 +87,8 @@ const ProductTask = () => {
 
   const proof  = selectedProd?.purchase_proof  || null;
   const review = selectedProd?.review_submission || null;
+  const selectedMode = String(selectedProd?.project_mode || selectedAlloc?.projects?.mode || "").toUpperCase();
+  const purchaseSource = purchaseSourceLabel(selectedMode);
   const invDone    = proofIsDone(proof);
   const revDone    = reviewIsDone(review);
   const invStatus  = statusLabel(proof);
@@ -219,7 +223,7 @@ const ProductTask = () => {
         <div className="pt-page-header">
           <div>
             <h1>Submit Invoice &amp; Review</h1>
-            <p>Upload your purchase invoice and post your Amazon review for each product.</p>
+            <p>Upload your purchase invoice and submit your review for each product.</p>
           </div>
           <button type="button" className="pt-back-btn" onClick={() => navigate(paths.tasks)}>← Back to My Tasks</button>
         </div>
@@ -356,7 +360,7 @@ const ProductTask = () => {
                       <div className="pt-step-num-badge">{invDone ? "✓" : "1"}</div>
                       <div>
                         <div className="pt-step-title">Upload Purchase Invoice</div>
-                        <div className="pt-step-subtitle">Screenshot or PDF of your Amazon order confirmation</div>
+                        <div className="pt-step-subtitle">Screenshot or PDF of your {purchaseSource} order confirmation</div>
                       </div>
                       <span className={`pt-status-tag ${invDone ? (invStatus === "APPROVED" ? "approved" : "pending") : "not-done"}`}>
                         {invDone ? (invStatus === "APPROVED" ? "✓ Approved" : "⏳ Under Review") : "Not uploaded"}
@@ -401,7 +405,7 @@ const ProductTask = () => {
                         </div>
 
                         <div className="pt-tip">
-                          💡 Upload your <strong>Amazon order confirmation</strong> — make sure the product name and price are clearly visible.
+                          💡 Upload your <strong>{purchaseSource} order confirmation</strong> — make sure the product name and price are clearly visible.
                         </div>
 
                         <button type="submit" className="pt-btn-primary" disabled={!invoiceFile || invoiceBusy}>
@@ -416,8 +420,8 @@ const ProductTask = () => {
                     <div className="pt-step-header">
                       <div className="pt-step-num-badge">{revDone ? "✓" : "2"}</div>
                       <div>
-                        <div className="pt-step-title">Submit Amazon Review</div>
-                        <div className="pt-step-subtitle">Post your review on Amazon, then submit the proof here</div>
+                        <div className="pt-step-title">Submit Product Review</div>
+                        <div className="pt-step-subtitle">Post your review, then submit the proof here</div>
                       </div>
                       <span className={`pt-status-tag ${revDone ? (revStatus === "APPROVED" ? "approved" : "pending") : invDone ? "not-done" : "locked"}`}>
                         {revDone ? (revStatus === "APPROVED" ? "✓ Approved" : "⏳ Under Review") : invDone ? "Ready to submit" : "Available after invoice"}
@@ -441,7 +445,7 @@ const ProductTask = () => {
                         {reviewMsg && <div className="pt-form-success">{reviewMsg}</div>}
 
                         <div className="pt-form-field">
-                          <label className="pt-label">Review URL <span className="pt-label-hint">(paste your Amazon review link)</span></label>
+                          <label className="pt-label">Review URL <span className="pt-label-hint">(paste your review link)</span></label>
                           <input
                             type="url"
                             className="pt-input"

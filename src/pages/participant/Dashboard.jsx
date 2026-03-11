@@ -486,36 +486,45 @@ const ParticipantDashboard = () => {
     })
   , [appliedProjects]);
 
-  const approvedRows = useMemo(() => {
-    // Only show APPROVED apps where:
-    // - The app status is APPROVED
-    // - AND the allocation is NOT cancelled (if allocation exists)
-    // Note: project.controller now returns active (RESERVED/PURCHASED) allocation first,
-    // so if allocation.status = CANCELLED it truly means no active allocation exists yet.
-    const approvedApps = appliedProjects.filter((item) => {
-      const appStatus = String(item?.status || "").toUpperCase();
-      if (appStatus !== "APPROVED") return false;
-      const allocStatus = String(item?.allocation?.status || "").toUpperCase();
-      // If there IS an allocation and it's cancelled, this app is stale — hide it
-      if (item?.allocation?.id && allocStatus === "CANCELLED") return false;
-      return true;
-    });
-    if (!approvedApps.length) return [];
-
-    const allocationId = approvedApps.find((item) => item?.allocation?.id)?.allocation?.id || null;
-    const allocationStatus = approvedApps.find((item) => item?.allocation?.status)?.allocation?.status || "APPROVED";
-
-    return [{
-      id: "all-approved",
-      allocationId,
-      allocationStatus,
-      products: approvedApps.map((item) => ({
-        name: item?.project_products?.name || item?.product_name || "—",
+  const approvedRows = useMemo(() =>
+    appliedProjects
+      .filter((item) => {
+        const appStatus = String(item?.status || "").toUpperCase();
+        if (appStatus !== "APPROVED") return false;
+        const allocStatus = String(item?.allocation?.status || "").toUpperCase();
+        if (item?.allocation?.id && allocStatus === "CANCELLED") return false;
+        return true;
+      })
+      .map((item) => ({
+        id: item.id,
+        allocationId: item?.allocation?.id || null,
+        allocationStatus: item?.allocation?.status || item?.status || "APPROVED",
+        productName: item?.project_products?.name || item?.product_name || "—",
         brand: item?.projects?.title || item?.project_title || "—",
-      })),
-      requestedAt: approvedApps[0]?.reviewed_at || approvedApps[0]?.created_at || null,
-    }];
-  }, [appliedProjects]);
+        requestedAt: item?.reviewed_at || item?.created_at || null,
+      }))
+  , [appliedProjects]);
+
+  const completedDisplayRows = useMemo(() => {
+    const merged = new Map();
+
+    for (const item of completedProjects) {
+      const key = item?.id || `${item?.project_id || "na"}::${item?.product_id || "na"}::completed`;
+      if (!merged.has(key)) merged.set(key, item);
+    }
+
+    for (const item of appliedProjects) {
+      if (String(item?.status || "").toUpperCase() !== "COMPLETED") continue;
+      const key = item?.id || `${item?.project_id || "na"}::${item?.product_id || "na"}::applied`;
+      if (!merged.has(key)) merged.set(key, item);
+    }
+
+    return Array.from(merged.values()).sort(
+      (a, b) =>
+        new Date(b?.completed_at || b?.reviewed_at || b?.created_at || 0).getTime() -
+        new Date(a?.completed_at || a?.reviewed_at || a?.created_at || 0).getTime()
+    );
+  }, [appliedProjects, completedProjects]);
 
   const activeTabCount = useMemo(() =>
     activeProjects.filter((item) =>
@@ -571,7 +580,7 @@ const ParticipantDashboard = () => {
 
   /* ── tabs ── */
   const approvedProductCount = useMemo(
-    () => approvedRows.reduce((sum, row) => sum + (row.products?.length || 0), 0),
+    () => approvedRows.length,
     [approvedRows]
   );
 
@@ -580,7 +589,7 @@ const ParticipantDashboard = () => {
     { key: "approved",  label: "Approved",         count: approvedProductCount },
     { key: "cancelled", label: "Cancelled",        count: cancelledRows.length },
     { key: "applied",   label: "Applied",          count: appliedRows.length },
-    { key: "completed", label: "Completed",        count: completedProjects.length },
+    { key: "completed", label: "Completed",        count: completedDisplayRows.length },
   ];
 
   /* ── loading screen ── */
@@ -819,17 +828,8 @@ const ParticipantDashboard = () => {
                   <div key={row.id} className="nd-list-card nd-list-card--approved">
                     <div className="nd-list-card-icon">✓</div>
                     <div className="nd-list-card-body">
-                      {/* Numbered product list with brand name per item */}
-                      <ul className="nd-approved-product-list">
-                        {row.products.map((p, idx) => (
-                          <li key={idx} className="nd-approved-product-item">
-                            <span className="nd-approved-product-index">{idx + 1}.</span>
-                            <span className="nd-approved-product-info">
-                              <span className="nd-approved-product-name">{p.name} — {p.brand || "—"}</span>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+                      <h4>{row.productName}</h4>
+                      <span className="nd-list-card-project">{row.brand || "???"}</span>
                       <span className="nd-list-card-date">Approved {formatDateTime(row.requestedAt)}</span>
                     </div>
                     <StatusBadge status={row.allocationStatus || "APPROVED"} />
@@ -945,7 +945,7 @@ const ParticipantDashboard = () => {
         {/* ══ TAB: Completed ══ */}
         {activeTab === "completed" && (
           <div className="nd-tab-content">
-            {completedProjects.length === 0 ? (
+            {completedDisplayRows.length === 0 ? (
               <EmptyState
                 icon="🏆"
                 title="No completed campaigns yet"
@@ -953,7 +953,7 @@ const ParticipantDashboard = () => {
               />
             ) : (
               <div className="nd-list-cards">
-                {completedProjects.map((item) => (
+                {completedDisplayRows.map((item) => (
                   <div key={item.id} className="nd-list-card nd-list-card--completed">
                     <div className="nd-list-card-icon">★</div>
                     <div className="nd-list-card-body">

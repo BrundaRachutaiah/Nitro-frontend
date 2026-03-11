@@ -11,6 +11,8 @@ const fmt = (v) => new Intl.NumberFormat("en-IN", { style: "currency", currency:
 const proofDone  = (p) => Boolean(p) && String(p?.status || "").toUpperCase() !== "REJECTED";
 const reviewDone = (r) => Boolean(r) && String(r?.status || "").toUpperCase() !== "REJECTED";
 const statusOf   = (x) => String(x?.status || "PENDING").toUpperCase();
+const purchaseButtonLabel = (mode) =>
+  String(mode || "").toUpperCase() === "MARKETPLACE" ? "Buy on Amazon ↗" : "Buy via Brand Website ↗";
 
 /* ── Confirmation Modal ── */
 const ConfirmModal = ({ products, onClose, onConfirm, submitting }) => (
@@ -603,7 +605,7 @@ const MyAllocations = () => {
                                 rel="noopener noreferrer"
                                 className="ma-product-link"
                               >
-                                Buy on Amazon ↗
+                                {purchaseButtonLabel(p?.project_mode || active?.projects?.mode)}
                               </a>
                             )}
                           </div>

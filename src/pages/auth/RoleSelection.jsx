@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   clearOauthHash,
@@ -10,25 +10,33 @@ import {
 
 const RoleSelection = () => {
   const navigate = useNavigate();
+  const [oauthError, setOauthError] = useState("");
+  const [isProcessingOauth, setIsProcessingOauth] = useState(false);
 
   useEffect(() => {
     const token = extractAccessTokenFromHash();
     if (!token) return;
+    setIsProcessingOauth(true);
+    setOauthError("");
     (async () => {
       try {
         const user = await verifyBackendUser(token);
         storeToken(token, true);
         clearOauthHash();
+        const role = String(user?.role || "").toUpperCase();
         const routes = {
           SUPER_ADMIN: `/super-admin/${user.id}/dashboard`,
           ADMIN: `/admin/${user.id}/dashboard`,
           PARTICIPANT: `/participant/${user.id}/dashboard`,
           BRAND: `/brand/dashboard`,
         };
-        navigate(routes[user.role] || "/login", { replace: true });
-      } catch {
+        navigate(routes[role] || "/dashboard", { replace: true });
+      } catch (err) {
         clearOauthHash();
         clearStoredTokens();
+        setOauthError(err?.message || "Google sign-in failed.");
+      } finally {
+        setIsProcessingOauth(false);
       }
     })();
   }, [navigate]);
@@ -232,12 +240,41 @@ const RoleSelection = () => {
           letter-spacing: 0.07em;
           text-transform: uppercase;
         }
+        .rs-alert {
+          width: 100%;
+          margin-bottom: 1rem;
+          padding: 0.85rem 1rem;
+          border-radius: 12px;
+          border: 1px solid rgba(255, 117, 117, 0.28);
+          background: rgba(255, 117, 117, 0.1);
+          color: #ffc1c1;
+          font-size: 0.84rem;
+          line-height: 1.45;
+        }
+        .rs-status {
+          width: 100%;
+          margin-bottom: 1rem;
+          padding: 0.85rem 1rem;
+          border-radius: 12px;
+          border: 1px solid rgba(106,212,243,0.24);
+          background: rgba(106,212,243,0.08);
+          color: #bdeeff;
+          font-size: 0.84rem;
+          line-height: 1.45;
+        }
       `}</style>
 
       <div className="rs-root">
         <div className="rs-shimmer" />
 
         <div className="rs-shell">
+          {isProcessingOauth && (
+            <div className="rs-status">Completing Google sign-in...</div>
+          )}
+          {oauthError && (
+            <div className="rs-alert">{oauthError}</div>
+          )}
+
           {/* Header */}
           <div className="rs-head">
             <div className="rs-logo">

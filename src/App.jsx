@@ -41,6 +41,7 @@ import ClientBudgets from './pages/admin/ClientBudgets';
 import Support from "./pages/superAdmin/Support";
 import TermsAndConditions from "./pages/legal/TermsAndConditions";
 import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
+import Footer from "./components/common/Footer";
 
 const RoleRoute = ({ allowedRoles, children }) => {
   const token = getStoredToken();
@@ -94,7 +95,14 @@ const RoleRoute = ({ allowedRoles, children }) => {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return children;
+  const normalizedRole = String(role || "").toUpperCase();
+
+  return (
+    <>
+      {children}
+      {["ADMIN", "SUPER_ADMIN"].includes(normalizedRole) ? <Footer variant="admin" /> : null}
+    </>
+  );
 };
 
 const DashboardRoute = () => {
@@ -209,7 +217,12 @@ const AdminDashboardRoute = () => {
   if (String(user.role || "").toUpperCase() !== "ADMIN") return <Navigate to="/dashboard" replace />;
   if (id !== user.id) return <Navigate to={`/admin/${user.id}/dashboard`} replace />;
 
-  return <AdminDashboard />;
+  return (
+    <>
+      <AdminDashboard />
+      <Footer variant="admin" />
+    </>
+  );
 };
 
 const SuperAdminDashboardRoute = () => {
@@ -251,7 +264,12 @@ const SuperAdminDashboardRoute = () => {
   if (String(user.role || "").toUpperCase() !== "SUPER_ADMIN") return <Navigate to="/dashboard" replace />;
   if (id !== user.id) return <Navigate to={`/super-admin/${user.id}/dashboard`} replace />;
 
-  return <SuperAdminDashboard />;
+  return (
+    <>
+      <SuperAdminDashboard />
+      <Footer variant="admin" />
+    </>
+  );
 };
 
 const ParticipantDashboardRoute = () => {
@@ -335,7 +353,12 @@ const ParticipantScopedRoute = ({ children }) => {
   if (String(user.role || "").toUpperCase() !== "PARTICIPANT") return <Navigate to="/dashboard" replace />;
   if (id !== user.id) return <Navigate to={`/participant/${user.id}/dashboard`} replace />;
 
-  return children;
+  return (
+    <>
+      {children}
+      <Footer variant="teal" />
+    </>
+  );
 };
 
 function App() {

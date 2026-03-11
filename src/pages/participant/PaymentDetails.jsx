@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getPaymentDetails, savePaymentDetails } from "../../api/allocation.api";
-import Footer from "../../components/common/Footer";
 import "./ActionForms.css";
 import "./PaymentDetailsConfirm.css";
 
@@ -303,7 +302,6 @@ const PaymentDetails = () => {
           </form>
         ) : null}
       </section>
-      <Footer variant="teal" />
     </div>
   );
 };

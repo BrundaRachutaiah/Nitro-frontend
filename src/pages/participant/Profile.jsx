@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { getPaymentDetails, savePaymentDetails } from "../../api/allocation.api";
 import { getMyProfile, updateMyProfile } from "../../api/user.api";
 import { getStoredToken, requestEmailUpdateInSupabase } from "../../lib/auth";
-import Footer from "../../components/common/Footer";
 import "./Profile.css";
 
 const initialForm = {
@@ -336,7 +335,6 @@ const Profile = () => {
           </form>
         ) : null}
       </main>
-      <Footer variant="teal" />
     </div>
   );
 };
