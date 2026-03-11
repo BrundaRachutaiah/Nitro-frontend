@@ -368,6 +368,10 @@ const MyAllocations = () => {
   const allInvDone  = products.length > 0 && products.every((p) => proofDone(p.purchase_proof));
   const allRevDone  = products.length > 0 && products.every((p) => reviewDone(p.review_submission));
   const allDone     = allInvDone && allRevDone;
+  // True when every invoice AND review has been explicitly APPROVED by admin (not just submitted)
+  const allApproved = products.length > 0 && products.every(
+    (p) => statusOf(p.purchase_proof) === "APPROVED" && statusOf(p.review_submission) === "APPROVED"
+  );
   const anyUploaded = products.some((p) => proofDone(p.purchase_proof) || reviewDone(p.review_submission));
 
   const timeLeft = useMemo(() => {
@@ -628,6 +632,47 @@ const MyAllocations = () => {
                   <h2 className="ma-card-title">Upload Invoice &amp; Review — Per Product</h2>
                   <p className="ma-card-sub">Each product needs its own invoice upload and review submission. Complete both for every product.</p>
 
+                  {/* ── All tasks admin-approved: show completed state ── */}
+                  {allApproved ? (
+                    <div className="ma-all-approved-banner" style={{
+                      marginTop: "20px", padding: "28px 24px", borderRadius: "16px",
+                      background: "linear-gradient(135deg, #0d2d1a 0%, #0a1f12 100%)",
+                      border: "1.5px solid #22c55e44", textAlign: "center"
+                    }}>
+                      <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>🎉</div>
+                      <h3 style={{ color: "#22c55e", fontSize: "1.25rem", fontWeight: 700, marginBottom: "8px" }}>
+                        All Tasks Completed!
+                      </h3>
+                      <p style={{ color: "#9aa3b2", fontSize: "14px", marginBottom: "20px", lineHeight: 1.6 }}>
+                        All your invoices and reviews have been approved by admin.<br />
+                        Your payout is being processed — check your payout status below.
+                      </p>
+                      {/* Show product summary */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
+                        {products.map((p, i) => (
+                          <div key={p.product_id || i} style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            padding: "10px 14px", borderRadius: "10px",
+                            background: "#0a1a0e", border: "1px solid #22c55e22"
+                          }}>
+                            <span style={{ color: "#e2e8f0", fontSize: "13px", fontWeight: 600 }}>
+                              {p.product_name || "Product"}
+                            </span>
+                            <span style={{ color: "#22c55e", fontSize: "12px", fontWeight: 700 }}>✓ Approved</span>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="ma-btn-primary"
+                        onClick={() => navigate(P.payouts)}
+                        style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)" }}
+                      >
+                        View My Payouts →
+                      </button>
+                    </div>
+                  ) : (
+                    <>
                   <div className="ma-per-product-grid">
                     {products.length > 0 ? products.map((prod, i) => {
                       const inv   = prod?.purchase_proof;
@@ -727,6 +772,8 @@ const MyAllocations = () => {
                         </div>
                       )}
                     </div>
+                  )}
+                    </>
                   )}
                 </div>
               )}

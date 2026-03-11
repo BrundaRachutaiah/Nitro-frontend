@@ -77,13 +77,16 @@ const openProductLink = (url) => {
    Priority order: COMPLETED → CANCELLED → PURCHASED → APPROVED → PENDING → REJECTED → FRESH
    Only ONE state is ever true at a time.
 ───────────────────────────────────────────────────────────── */
-const resolveCardState = (latestApplication) => {
+const resolveCardState = (latestApplication, completedProductIds) => {
   if (!latestApplication) return "FRESH";
   const app = String(latestApplication?.status || "").toUpperCase();
   const alloc = String(latestApplication?.allocation?.status || "").toUpperCase();
 
   // Completed beats everything
   if (app === "COMPLETED" || alloc === "COMPLETED") return "COMPLETED";
+  // Check if this product has a payout and is in completedProjects
+  const productId = latestApplication?.product_id || latestApplication?.project_products?.id;
+  if (productId && completedProductIds && completedProductIds.has(productId)) return "COMPLETED";
   // Cancelled allocation must allow re-apply (not task flow)
   if (app === "CANCELLED" || alloc === "CANCELLED") return "CANCELLED";
   // Purchased = product in hand, task ongoing
@@ -145,8 +148,8 @@ const CARD_META = {
   COMPLETED: { pill: "★  Completed",                                  pillCls: "nd-pill--done",         canSelect: true,  canTask: false },
 };
 
-const ProductCard = ({ item, isSelected, latestApplication, onSelect, onNavigate, addToast }) => {
-  const cardState = resolveCardState(latestApplication);
+const ProductCard = ({ item, isSelected, latestApplication, completedProductIds, onSelect, onNavigate, addToast }) => {
+  const cardState = resolveCardState(latestApplication, completedProductIds);
   const { pill, pillCls, canSelect, canTask } = CARD_META[cardState];
 
   const actionLabel = () => {
@@ -472,6 +475,16 @@ const ParticipantDashboard = () => {
     return dashboardProducts.filter((item) => s.has(item.selection_key));
   }, [dashboardProducts, selectedProductKeys]);
 
+  /* Set of product_ids that have moved to completed — used to exclude from Approved tab */
+  const completedProductIds = useMemo(() => {
+    const ids = new Set();
+    for (const item of completedProjects) {
+      const pid = item?.product_id || item?.project_products?.id;
+      if (pid) ids.add(pid);
+    }
+    return ids;
+  }, [completedProjects]);
+
   /* Applied = PENDING + REJECTED only */
   const appliedRows = useMemo(() =>
     appliedProjects.filter((item) => ["PENDING", "REJECTED"].includes(String(item?.status || "").toUpperCase()))
@@ -493,6 +506,9 @@ const ParticipantDashboard = () => {
         if (appStatus !== "APPROVED") return false;
         const allocStatus = String(item?.allocation?.status || "").toUpperCase();
         if (item?.allocation?.id && allocStatus === "CANCELLED") return false;
+        // Exclude products that have moved to the Completed tab
+        const productId = item?.product_id || item?.project_products?.id;
+        if (productId && completedProductIds.has(productId)) return false;
         return true;
       })
       .map((item) => ({
@@ -797,6 +813,7 @@ const ParticipantDashboard = () => {
                       item={item}
                       isSelected={selectedProductKeys.includes(item.selection_key)}
                       latestApplication={latestApp}
+                      completedProductIds={completedProductIds}
                       addToast={addToast}
                       onSelect={(key) => setSelectedProductKeys((prev) =>
                         prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
