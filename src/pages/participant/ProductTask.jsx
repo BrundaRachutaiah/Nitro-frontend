@@ -145,6 +145,14 @@ const ProductTask = () => {
     if (!reviewUrl.trim() && reviewFiles.length === 0 && !reviewText.trim()) {
       setReviewErr("Please add a review URL, screenshot, or write your review text."); return;
     }
+    const allInvoicesDoneAfterSubmit = products.every((p) =>
+      p.product_id === prodId ? true : proofIsDone(p.purchase_proof)
+    );
+    const allReviewsDoneAfterSubmit = products.every((p) =>
+      p.product_id === prodId ? true : reviewIsDone(p.review_submission)
+    );
+    const shouldRedirectToCompleted = products.length > 0 && allInvoicesDoneAfterSubmit && allReviewsDoneAfterSubmit;
+    const completionPopupMessage = "Thank you for your review. After admin approval, your payout will be processed.";
     setReviewBusy(true); setReviewErr(""); setReviewMsg("");
     try {
       let finalUrl  = reviewUrl.trim();
@@ -176,6 +184,16 @@ const ProductTask = () => {
 
       setReviewMsg("✅ Review submitted! Awaiting admin approval.");
       setReviewUrl(""); setReviewText(""); setReviewFiles([]);
+      if (shouldRedirectToCompleted) {
+        window.alert(completionPopupMessage);
+        navigate(paths.dashboard, {
+          state: {
+            dashboardTab: "completed",
+            dashboardToast: completionPopupMessage,
+            dashboardToastType: "success"
+          }
+        });
+      }
     } catch (err) {
       const msg = err.response?.data?.message || "Submission failed. Please try again.";
       if (/already submitted/i.test(msg)) {
@@ -192,6 +210,16 @@ const ProductTask = () => {
           };
         }));
         setReviewMsg("✅ Review already submitted — awaiting admin approval.");
+        if (shouldRedirectToCompleted) {
+          window.alert(completionPopupMessage);
+          navigate(paths.dashboard, {
+            state: {
+              dashboardTab: "completed",
+              dashboardToast: completionPopupMessage,
+              dashboardToastType: "success"
+            }
+          });
+        }
       } else {
         setReviewErr(msg);
       }

@@ -23,6 +23,13 @@ const toAmount = (v) => {
 const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 const fmtCurrency = (v) => inr.format(toAmount(v));
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "-";
+const getRequestDate = (row) => {
+  const status = String(row?.status || "").toUpperCase();
+  if (["APPROVED", "PURCHASED", "COMPLETED", "REJECTED"].includes(status)) {
+    return row?.reviewed_at || row?.updated_at || row?.created_at || null;
+  }
+  return row?.updated_at || row?.created_at || null;
+};
 const getAutoAllocated = (row) => toAmount(row?.suggested_allocated_budget ?? row?.requested_amount ?? row?.project_products?.product_value);
 
 const Icon = ({ name, size = 18 }) => {
@@ -70,6 +77,8 @@ const StatusBadge = ({ status }) => {
   const s = String(status || "").toUpperCase();
   const map = {
     APPROVED: { cls: "sa-status-badge--published", label: "Approved" },
+    PURCHASED: { cls: "sa-status-badge--published", label: "Approved" },
+    COMPLETED: { cls: "sa-status-badge--published", label: "Approved" },
     PENDING: { cls: "sa-status-badge--pending", label: "Pending" },
     REJECTED: { cls: "sa-status-badge--rejected", label: "Rejected" },
   };
@@ -471,7 +480,7 @@ const ProductApplications = () => {
                               </td>
                               <td className="sa-td-bold">{fmtCurrency(row?.requested_amount)}</td>
                               <td><span className="sa-td-bold" style={{ color: "var(--green)" }}>{fmtCurrency(budget)}</span></td>
-                              <td className="sa-td-muted">{fmtDate(row?.created_at)}</td>
+                              <td className="sa-td-muted">{fmtDate(getRequestDate(row))}</td>
                               <td>
                                 {isPending ? (
                                   <div style={{ display: "flex", gap: 6 }}>

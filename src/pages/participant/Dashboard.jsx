@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   API_BASE_URL,
   clearStoredTokens,
@@ -125,6 +125,7 @@ const ToastContainer = ({ toasts, onDismiss }) => (
 const StatusBadge = ({ status }) => {
   const map = {
     PENDING:   ["Pending Review", "badge--pending"],
+    SUBMITTED: ["Review Submitted", "badge--pending"],
     PENDING_PAYMENT: ["Payment Pending", "badge--pending"],
     APPROVED:  ["Approved",       "badge--approved"],
     REJECTED:  ["Rejected",       "badge--rejected"],
@@ -278,6 +279,7 @@ const EmptyState = ({ icon, title, subtitle }) => (
 ═══════════════════════════════════════════════════════════════ */
 const ParticipantDashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [loading, setLoading]         = useState(true);
   const [user, setUser]               = useState(null);
@@ -296,6 +298,7 @@ const ParticipantDashboard = () => {
   const [notifBell, setNotifBell]     = useState([]);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const notifRef = useRef(null);
+  const handledNavStateRef = useRef("");
 
   /* ── toast helpers ── */
   const addToast = useCallback((message, type = "info") => {
@@ -406,6 +409,22 @@ const ParticipantDashboard = () => {
   }, [navigate, addToast]);
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
+
+  useEffect(() => {
+    const navState = location.state || {};
+    const marker = `${navState.dashboardToast || ""}::${navState.dashboardTab || ""}`;
+    if (!navState.dashboardToast && !navState.dashboardTab) return;
+    if (handledNavStateRef.current === marker) return;
+    handledNavStateRef.current = marker;
+
+    if (navState.dashboardTab) {
+      setActiveTab(navState.dashboardTab);
+    }
+    if (navState.dashboardToast) {
+      addToast(navState.dashboardToast, navState.dashboardToastType || "success");
+    }
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate, addToast]);
 
   useEffect(() => {
     if (!uid) return;
@@ -542,6 +561,12 @@ const ParticipantDashboard = () => {
         new Date(a?.completed_at || a?.reviewed_at || a?.created_at || 0).getTime()
     );
   }, [appliedProjects, completedProjects]);
+
+  const getCompletedRowStatus = (item) => {
+    const workflowStatus = String(item?.workflow_status || "").toUpperCase();
+    if (workflowStatus) return workflowStatus;
+    return String(item?.payout_status || "").toUpperCase() === "PAID" ? "COMPLETED" : "PENDING_PAYMENT";
+  };
 
   const activeTabCount = useMemo(() =>
     activeProjects.filter((item) =>
@@ -978,11 +1003,15 @@ const ParticipantDashboard = () => {
                       <h4>{item?.project_products?.name || item?.name || "—"}</h4>
                       <span className="nd-list-card-project">{item?.projects?.title || item?.project_title || "—"}</span>
                       <span className="nd-list-card-date">
-                        {String(item?.payout_status || "").toUpperCase() === "PAID" ? "Completed " : "Awaiting payment since "}
+                        {getCompletedRowStatus(item) === "SUBMITTED"
+                          ? "Invoice/review submitted "
+                          : getCompletedRowStatus(item) === "APPROVED"
+                            ? "Admin approved, payout pending since "
+                            : "Completed "}
                         {formatDateTime(item?.completed_at || item?.payout_created_at || item?.reviewed_at || item?.updated_at)}
                       </span>
                     </div>
-                    <StatusBadge status={String(item?.payout_status || "").toUpperCase() === "PAID" ? "COMPLETED" : "PENDING_PAYMENT"} />
+                    <StatusBadge status={getCompletedRowStatus(item)} />
                     <div className="nd-list-card-action">
                       {(item?.project_products?.product_value ?? item?.allocated_budget) ? (
                         <span className="nd-chip nd-chip--reward">
