@@ -125,6 +125,7 @@ const ToastContainer = ({ toasts, onDismiss }) => (
 const StatusBadge = ({ status }) => {
   const map = {
     PENDING:   ["Pending Review", "badge--pending"],
+    PENDING_PAYMENT: ["Payment Pending", "badge--pending"],
     APPROVED:  ["Approved",       "badge--approved"],
     REJECTED:  ["Rejected",       "badge--rejected"],
     CANCELLED: ["Cancelled",      "badge--rejected"],
@@ -977,14 +978,15 @@ const ParticipantDashboard = () => {
                       <h4>{item?.project_products?.name || item?.name || "—"}</h4>
                       <span className="nd-list-card-project">{item?.projects?.title || item?.project_title || "—"}</span>
                       <span className="nd-list-card-date">
-                        Completed {formatDateTime(item?.completed_at || item?.reviewed_at || item?.updated_at)}
+                        {String(item?.payout_status || "").toUpperCase() === "PAID" ? "Completed " : "Awaiting payment since "}
+                        {formatDateTime(item?.completed_at || item?.payout_created_at || item?.reviewed_at || item?.updated_at)}
                       </span>
                     </div>
-                    <StatusBadge status="COMPLETED" />
+                    <StatusBadge status={String(item?.payout_status || "").toUpperCase() === "PAID" ? "COMPLETED" : "PENDING_PAYMENT"} />
                     <div className="nd-list-card-action">
-                      {item?.projects?.reward ? (
+                      {(item?.project_products?.product_value ?? item?.allocated_budget) ? (
                         <span className="nd-chip nd-chip--reward">
-                          🎁 {formatInr(item.projects.reward)} earned
+                          {formatInr(item?.project_products?.product_value ?? item?.allocated_budget)} value
                         </span>
                       ) : (
                         <span className="nd-chip nd-chip--done">Campaign complete</span>
