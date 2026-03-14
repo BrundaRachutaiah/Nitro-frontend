@@ -371,6 +371,16 @@ const ProductTask = () => {
                   <div className="pt-all-done-icon">🎉</div>
                   <h2>All done!</h2>
                   <p>All invoices and reviews submitted. Check your payout status on the Payouts page.</p>
+                  {products.length > 0 && (
+                    <div className="pt-done-products" style={{ width: "100%", maxWidth: 520, display: "grid", gap: 8, marginTop: 8 }}>
+                      {products.map((p) => (
+                        <div key={p.product_id || p.application_id || p.id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                          <span style={{ color: "#d0ffe8" }}>{p.product_name || "Product"}</span>
+                          <span style={{ color: "#22c55e", fontWeight: 700 }}>✓ Submitted</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <button type="button" className="pt-btn-primary" onClick={() => navigate(paths.payouts)}>View Payouts →</button>
                 </div>
               ) : selectedProd ? (

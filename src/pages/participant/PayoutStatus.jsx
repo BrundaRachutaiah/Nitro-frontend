@@ -166,6 +166,7 @@ const PayoutStatus = () => {
                   <thead>
                     <tr>
                       <th>Campaign</th>
+                      <th>Product</th>
                       <th>Amount</th>
                       <th>Status</th>
                       <th>Note</th>
@@ -175,11 +176,13 @@ const PayoutStatus = () => {
                   <tbody>
                     {data.map((item) => {
                       const title = item?.projects?.title || item?.projects?.name || "Campaign";
+                      const productName = item?.project_products?.name || item?.product_name || "—";
                       const { label, cls, icon } = getStatusMeta(item?.status);
                       return (
                         <tr key={item.id}>
                           <td>{title}</td>
-                          <td className="pp-amount">{formatCurrency(item?.product_amount)}</td>
+                          <td>{productName}</td>
+                          <td className="pp-amount">{formatCurrency(item?.product_amount ?? item?.amount ?? 0)}</td>
                           <td>
                             <span className={`participant-payout-status ${cls}`}>
                               {icon} {label}

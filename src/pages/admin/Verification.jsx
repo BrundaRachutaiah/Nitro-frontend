@@ -188,7 +188,6 @@ const cardStyle = {
 const buildRowKey = (row) =>
   [
     row.participant_id || "na",
-    row.project_id || "na",
     row.product_id || "na",
     row.allocation_id || "na",
   ].join("::");
