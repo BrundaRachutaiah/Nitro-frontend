@@ -99,7 +99,13 @@ const PayoutStatus = () => {
     }
   };
 
-  useEffect(() => { loadPayouts(); }, []);
+  useEffect(() => {
+  loadPayouts();
+
+  const interval = setInterval(loadPayouts, 30000); // refresh every 5 seconds
+
+  return () => clearInterval(interval);
+}, []);
 
   const summary = useMemo(() => {
     const total = data.reduce((s, i) => s + Number(i?.product_amount || 0), 0);

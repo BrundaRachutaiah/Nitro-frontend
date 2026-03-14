@@ -216,8 +216,8 @@ const ProductApplications = () => {
     .filter((row) => String(row?.status || "").toUpperCase() === "PENDING" && !!selectedRows[row.id])
     .map((row) => row.id);
 
-  const onApprove = async (row) => {
-    const budget = getAutoAllocated(row);
+  const onApprove = async (row, budgetOverride) => {
+    const budget = toAmount(budgetOverride ?? getAutoAllocated(row));
     setWorkingId(`approve-${row.id}`);
     setError("");
     try {
@@ -282,18 +282,62 @@ const ProductApplications = () => {
           <div className="su-modal">
             <div className="su-modal-icon"><Icon name="alert" size={22} /></div>
             <h3 className="su-modal-title">Confirm {confirmModal.action === "approve" ? "Approval" : "Rejection"}</h3>
-            <p className="su-modal-body">
-              {confirmModal.action === "approve"
-                ? <>Approve <strong>{confirmModal.name}</strong>'s application? Budget allocation: <strong style={{ color: "var(--green)" }}>{fmtCurrency(confirmModal.budget)}</strong></>
-                : <>Reject <strong>{confirmModal.name}</strong>'s application for <strong>{confirmModal.product}</strong>?</>}
-            </p>
+            <div className="su-modal-body">
+              {confirmModal.action === "approve" ? (
+                <>
+                  <div style={{ marginBottom: 10 }}>
+                    Approve <strong>{confirmModal.name}</strong>'s application for <strong>{confirmModal.product}</strong>?
+                  </div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span className="sa-td-muted">Allocated budget (₹)</span>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={toAmount(confirmModal.budget)}
+                        onChange={(e) => setConfirmModal((prev) => prev ? ({ ...prev, budget: toAmount(e.target.value) }) : prev)}
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: "rgba(255,255,255,0.04)",
+                          color: "white",
+                        }}
+                      />
+                    </label>
+
+                    <div className="sa-td-muted" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                      <span>Project budget: <strong style={{ color: "var(--green)" }}>{fmtCurrency(confirmModal.row?.project_budget)}</strong></span>
+                      <span>Remaining: <strong style={{ color: "var(--green)" }}>{fmtCurrency(confirmModal.row?.project_remaining_budget)}</strong></span>
+                      <span>Requested: <strong>{fmtCurrency(confirmModal.row?.requested_amount)}</strong></span>
+                    </div>
+
+                    {toAmount(confirmModal.budget) > toAmount(confirmModal.row?.project_remaining_budget) && (
+                      <div className="sa-td-muted" style={{ color: "#ffb020" }}>
+                        Allocated budget exceeds remaining project budget.
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>Reject <strong>{confirmModal.name}</strong>'s application for <strong>{confirmModal.product}</strong>?</>
+              )}
+            </div>
             <div className="su-modal-actions">
               <button type="button" className="su-action-btn su-action-btn--ghost" onClick={() => setConfirmModal(null)}>Cancel</button>
               <button
                 type="button"
                 className={`su-action-btn ${confirmModal.action === "approve" ? "su-action-btn--approve" : "su-action-btn--reject"}`}
-                disabled={!!workingId}
-                onClick={() => (confirmModal.action === "approve" ? onApprove(confirmModal.row) : onReject(confirmModal.id))}
+                disabled={
+                  !!workingId
+                  || (confirmModal.action === "approve" && (
+                    toAmount(confirmModal.budget) <= 0
+                    || toAmount(confirmModal.budget) > toAmount(confirmModal.row?.project_remaining_budget)
+                  ))
+                }
+                onClick={() => (confirmModal.action === "approve" ? onApprove(confirmModal.row, confirmModal.budget) : onReject(confirmModal.id))}
               >
                 {workingId ? "Working..." : confirmModal.action === "approve" ? "Approve" : "Reject"}
               </button>
@@ -449,6 +493,7 @@ const ProductApplications = () => {
                           <th>Product URL</th>
                           <th>Requested</th>
                           <th>Auto-Allocated</th>
+                          <th>Remaining Budget</th>
                           <th>Date</th>
                           <th>Actions</th>
                         </tr>
@@ -457,6 +502,8 @@ const ProductApplications = () => {
                         {section.items.map((row) => {
                           const budget = getAutoAllocated(row);
                           const isPending = String(row?.status || "").toUpperCase() === "PENDING";
+                          const remainingBudget = toAmount(row?.project_remaining_budget);
+                          const canApprove = row?.can_approve !== false && budget > 0;
                           const brand = row?.projects?.title || row?.project_title || "-";
                           return (
                             <tr key={row.id} className="sa-table-row--clickable">
@@ -480,6 +527,7 @@ const ProductApplications = () => {
                               </td>
                               <td className="sa-td-bold">{fmtCurrency(row?.requested_amount)}</td>
                               <td><span className="sa-td-bold" style={{ color: "var(--green)" }}>{fmtCurrency(budget)}</span></td>
+                              <td className="sa-td-muted">{fmtCurrency(remainingBudget)}</td>
                               <td className="sa-td-muted">{fmtDate(getRequestDate(row))}</td>
                               <td>
                                 {isPending ? (
@@ -487,7 +535,7 @@ const ProductApplications = () => {
                                     <button
                                       type="button"
                                       className="su-action-btn su-action-btn--approve"
-                                      disabled={!!workingId || budget <= 0}
+                                      disabled={!!workingId || !canApprove}
                                       onClick={() => setConfirmModal({ action: "approve", id: row.id, row, name: section.participant_name || "participant", product: row?.project_products?.name, budget })}
                                     >
                                       <Icon name="check" size={13} /> Approve
