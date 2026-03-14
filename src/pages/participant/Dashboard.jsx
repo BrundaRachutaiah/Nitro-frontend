@@ -91,12 +91,16 @@ const resolveCardState = (latestApplication, completedProductIds) => {
   const app = String(latestApplication?.status || "").toUpperCase();
   const alloc = String(latestApplication?.allocation?.status || "").toUpperCase();
 
-  if (wf === "COMPLETED" || payout === "PAID" || app === "COMPLETED") return "COMPLETED";
+  // Treat a product as "Completed" only when the workflow is explicitly completed
+  // or the payout has been marked PAID. Application.status may become COMPLETED
+  // immediately after invoice+review approval (before payout is paid), so it
+  // should not force the "Completed" card state by itself.
+  if (wf === "COMPLETED" || payout === "PAID") return "COMPLETED";
   const productId = latestApplication?.product_id || latestApplication?.project_products?.id;
   if (productId && completedProductIds && completedProductIds.has(productId)) return "COMPLETED";
   if (app === "CANCELLED" || alloc === "CANCELLED") return "CANCELLED";
   if (app === "PURCHASED") return "PURCHASED";
-  if (wf === "APPROVED" || wf === "SUBMITTED" || app === "APPROVED") return "APPROVED";
+  if (wf === "APPROVED" || wf === "SUBMITTED" || app === "APPROVED" || app === "COMPLETED") return "APPROVED";
   if (app === "PENDING") return "PENDING";
   if (app === "REJECTED") return "REJECTED";
   return "FRESH";
