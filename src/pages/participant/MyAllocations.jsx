@@ -362,8 +362,18 @@ const MyAllocations = () => {
       products.some((p) => proofDone(p.purchase_proof))
     );
   }, [active, purchased, products]);
-  const project     = active?.projects || {};
-  const projectName = project.title || project.name || "Campaign";
+  const activeProjectTitle = active?.projects?.title || null;
+  const activeProjectName = active?.projects?.name || null;
+  const projectName = useMemo(() => {
+    const names = new Set(
+      (Array.isArray(products) ? products : [])
+        .map((p) => String(p?.project_title || "").trim())
+        .filter(Boolean)
+    );
+    if (names.size > 1) return "Multiple campaigns";
+    if (names.size === 1) return Array.from(names)[0];
+    return activeProjectTitle || activeProjectName || "Campaign";
+  }, [products, activeProjectTitle, activeProjectName]);
   const totalValue  = products.reduce((s, p) => s + Number(p?.product_value || 0), 0);
   const allInvDone  = products.length > 0 && products.every((p) => proofDone(p.purchase_proof));
   const allRevDone  = products.length > 0 && products.every((p) => reviewDone(p.review_submission));
