@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+﻿import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   API_BASE_URL,
@@ -10,7 +10,7 @@ import {
 import { getActiveCatalog } from "../../api/project.api";
 import "./Dashboard.css";
 
-/* ─── Fetch helper ─────────────────────────────────────────── */
+/* ──── Fetch helper ─────────────────────────────────────────────────────── */
 const fetchJson = async (path, token, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) },
@@ -46,7 +46,14 @@ const getLatestProductApplication = (appliedProjects, productId) => {
     return pid === productId;
   });
   if (!matches.length) return null;
-  matches.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  matches.sort((a, b) => {
+    const bt = new Date(b.created_at || 0).getTime();
+    const at = new Date(a.created_at || 0).getTime();
+    if (bt !== at) return bt - at;
+    const bHasAlloc = Number(Boolean(b?.allocation?.id));
+    const aHasAlloc = Number(Boolean(a?.allocation?.id));
+    return bHasAlloc - aHasAlloc;
+  });
   return matches[0];
 };
 
@@ -72,36 +79,30 @@ const openProductLink = (url) => {
   window.open(normalized, "_blank", "noopener,noreferrer");
 };
 
-/* ─────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────
    STRICT STATUS RESOLVER
-   Priority order: COMPLETED → CANCELLED → PURCHASED → APPROVED → PENDING → REJECTED → FRESH
+   Priority order: COMPLETED -> CANCELLED -> PURCHASED -> APPROVED -> PENDING -> REJECTED -> FRESH
    Only ONE state is ever true at a time.
-───────────────────────────────────────────────────────────── */
+────────────────────────────────────────────────────────────────────────── */
 const resolveCardState = (latestApplication, completedProductIds) => {
   if (!latestApplication) return "FRESH";
+  const wf = String(latestApplication?.workflow_status || "").toUpperCase();
+  const payout = String(latestApplication?.payout_status || "").toUpperCase();
   const app = String(latestApplication?.status || "").toUpperCase();
   const alloc = String(latestApplication?.allocation?.status || "").toUpperCase();
 
-  // Completed beats everything
-  if (app === "COMPLETED" || alloc === "COMPLETED") return "COMPLETED";
-  // Check if this product has a payout and is in completedProjects
+  if (wf === "COMPLETED" || payout === "PAID") return "COMPLETED";
   const productId = latestApplication?.product_id || latestApplication?.project_products?.id;
   if (productId && completedProductIds && completedProductIds.has(productId)) return "COMPLETED";
-  // Cancelled allocation must allow re-apply (not task flow)
   if (app === "CANCELLED" || alloc === "CANCELLED") return "CANCELLED";
-  // Purchased = product in hand, task ongoing
   if (app === "PURCHASED") return "PURCHASED";
-  // Approved = admin said yes
-  if (app === "APPROVED") return "APPROVED";
-  // Pending = waiting
+  if (wf === "APPROVED" || wf === "SUBMITTED" || app === "APPROVED" || app === "COMPLETED") return "APPROVED";
   if (app === "PENDING") return "PENDING";
-  // Rejected
   if (app === "REJECTED") return "REJECTED";
-  // Never applied
   return "FRESH";
 };
 
-/* ─── Toast system ─────────────────────────────────────────── */
+/* ──── Toast system ──────────────────────────────────────────────────── */
 let _toastId = 0;
 
 const ToastContainer = ({ toasts, onDismiss }) => (
@@ -109,10 +110,10 @@ const ToastContainer = ({ toasts, onDismiss }) => (
     {toasts.map((t) => (
       <div key={t.id} className={`nd-toast nd-toast--${t.type}`}>
         <div className="nd-toast-icon-wrap">
-          {t.type === "success" && "✓"}
-          {t.type === "error"   && "✕"}
-          {t.type === "warning" && "!"}
-          {t.type === "info"    && "i"}
+          {t.type === "success" && "✅"}
+          {t.type === "error"   && "❌"}
+          {t.type === "warning" && "⚠️"}
+          {t.type === "info"    && "ℹ️"}
         </div>
         <p className="nd-toast-msg">{t.message}</p>
         <button type="button" className="nd-toast-close" onClick={() => onDismiss(t.id)}>✕</button>
@@ -121,7 +122,7 @@ const ToastContainer = ({ toasts, onDismiss }) => (
   </div>
 );
 
-/* ─── Status badge (for list tabs) ────────────────────────── */
+/* ──── Status badge (for list tabs) ──────────────────────────────────── */
 const StatusBadge = ({ status }) => {
   const map = {
     PENDING:   ["Pending Review", "badge--pending"],
@@ -137,17 +138,17 @@ const StatusBadge = ({ status }) => {
   return <span className={`nd-badge ${cls}`}>{label}</span>;
 };
 
-/* ─────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────
    PRODUCT CARD — exactly ONE status pill, ONE action button
-───────────────────────────────────────────────────────────── */
+────────────────────────────────────────────────────────────────────────── */
 const CARD_META = {
   FRESH:     { pill: null,                                            pillCls: "",                      canSelect: true,  canTask: false },
-  PENDING:   { pill: "⏳  Awaiting Admin Approval",                  pillCls: "nd-pill--pending",      canSelect: false, canTask: false },
-  APPROVED:  { pill: "✓  Product Allocated to You",                  pillCls: "nd-pill--active",       canSelect: false, canTask: true  },
-  CANCELLED: { pill: "✕  Allocation Cancelled",                      pillCls: "nd-pill--rejected",     canSelect: true,  canTask: false },
-  PURCHASED: { pill: "🛍  Product Purchased — Complete Your Tasks",   pillCls: "nd-pill--purchased",    canSelect: false, canTask: true  },
-  REJECTED:  { pill: "✕  Request Rejected",                          pillCls: "nd-pill--rejected",     canSelect: true,  canTask: false },
-  COMPLETED: { pill: "★  Completed",                                  pillCls: "nd-pill--done",         canSelect: true,  canTask: false },
+  PENDING:   { pill: "⏳ Awaiting Admin Approval",                  pillCls: "nd-pill--pending",      canSelect: false, canTask: false },
+  APPROVED:  { pill: "✓ Product Allocated to You",                  pillCls: "nd-pill--active",       canSelect: false, canTask: true  },
+  CANCELLED: { pill: "✕ Allocation Cancelled",                      pillCls: "nd-pill--rejected",     canSelect: true,  canTask: false },
+  PURCHASED: { pill: "🛒 Product Purchased — Complete Your Tasks",   pillCls: "nd-pill--purchased",    canSelect: false, canTask: true  },
+  REJECTED:  { pill: "✕ Request Rejected",                          pillCls: "nd-pill--rejected",     canSelect: true,  canTask: false },
+  COMPLETED: { pill: "★ Completed",                                  pillCls: "nd-pill--done",         canSelect: true,  canTask: false },
 };
 
 const ProductCard = ({ item, isSelected, latestApplication, completedProductIds, onSelect, onNavigate, addToast }) => {
@@ -175,7 +176,7 @@ const ProductCard = ({ item, isSelected, latestApplication, completedProductIds,
 
   const handleTask = (e) => {
     e.stopPropagation();
-    addToast("Opening your task for this product…", "info");
+    addToast("Opening your task for this product...", "info");
     const allocId = latestApplication?.allocation?.id;
     onNavigate(allocId);
   };
@@ -247,7 +248,7 @@ const ProductCard = ({ item, isSelected, latestApplication, completedProductIds,
         <div className="nd-card-action">
           {canTask && (
             <button type="button" className="nd-btn nd-btn--task" onClick={handleTask}>
-              Go to My Tasks →
+              Go to My Tasks &rarr;
             </button>
           )}
           {canSelect && (
@@ -265,7 +266,7 @@ const ProductCard = ({ item, isSelected, latestApplication, completedProductIds,
   );
 };
 
-/* ─── Empty state ──────────────────────────────────────────── */
+/* ──── Empty state ──────────────────────────────────────────────────── */
 const EmptyState = ({ icon, title, subtitle }) => (
   <div className="nd-empty">
     <div className="nd-empty-icon">{icon}</div>
@@ -274,9 +275,9 @@ const EmptyState = ({ icon, title, subtitle }) => (
   </div>
 );
 
-/* ═══════════════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════════════════════════════════
    MAIN DASHBOARD
-═══════════════════════════════════════════════════════════════ */
+════════════════════════════════════════════════════════════════════════════ */
 const ParticipantDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -340,9 +341,6 @@ const ParticipantDashboard = () => {
       const nextApplied = Array.isArray(appliedRes?.data) ? appliedRes.data : [];
       setAppliedProjects(nextApplied);
 
-      // Use dedicated /projects/completed endpoint; if it returns nothing,
-      // fall back to COMPLETED-status items from the applied list (which
-      // includes allocations whose status has been marked COMPLETED).
       const dedicatedCompleted = Array.isArray(completedRes?.data) ? completedRes.data : [];
       if (dedicatedCompleted.length > 0) {
         setCompletedProjects(dedicatedCompleted);
@@ -390,7 +388,6 @@ const ParticipantDashboard = () => {
         const notifs = Array.isArray(notifRes?.data) ? notifRes.data : [];
         const unread  = notifs.filter((n) => !n.is_read);
         setNotifBell(unread);
-        // Show toast for each unread notification (max 3)
         unread.slice(0, 3).forEach((n, i) => {
           const isApproved = String(n.type || "").toUpperCase().includes("APPROVED");
           const isRejected = String(n.type || "").toUpperCase().includes("REJECTED");
@@ -436,7 +433,6 @@ const ParticipantDashboard = () => {
     } catch { setIsFirstVisit(false); }
   }, [uid]);
 
-  /* close notif panel on outside click */
   useEffect(() => {
     const handler = (e) => {
       if (notifRef.current && !notifRef.current.contains(e.target)) setShowNotifPanel(false);
@@ -446,7 +442,7 @@ const ParticipantDashboard = () => {
   }, []);
 
   const handleLogout = async () => {
-    addToast("Logging you out…", "info");
+    addToast("Logging you out...", "info");
     const token = getStoredToken();
     await signOutFromSupabase(token);
     clearStoredTokens();
@@ -495,22 +491,49 @@ const ParticipantDashboard = () => {
     return dashboardProducts.filter((item) => s.has(item.selection_key));
   }, [dashboardProducts, selectedProductKeys]);
 
-  /* Set of product_ids that have moved to completed — used to exclude from Approved tab */
   const completedProductIds = useMemo(() => {
-    const ids = new Set();
+    const latestByProduct = new Map();
+
     for (const item of completedProjects) {
       const pid = item?.product_id || item?.project_products?.id;
-      if (pid) ids.add(pid);
+      if (!pid) continue;
+      const t = new Date(
+        item?.completed_at
+        || item?.payout_created_at
+        || item?.reviewed_at
+        || item?.created_at
+        || 0
+      ).getTime();
+      const existing = latestByProduct.get(pid);
+      const et = new Date(
+        existing?.completed_at
+        || existing?.payout_created_at
+        || existing?.reviewed_at
+        || existing?.created_at
+        || 0
+      ).getTime();
+      if (!existing || t >= et) latestByProduct.set(pid, item);
+    }
+
+    const ids = new Set();
+    for (const item of latestByProduct.values()) {
+      const wf = String(item?.workflow_status || "").toUpperCase();
+      if (wf === "COMPLETED") ids.add(item?.product_id || item?.project_products?.id);
     }
     return ids;
   }, [completedProjects]);
 
-  /* Applied = PENDING + REJECTED only */
+  const completedTabProductIds = completedProductIds;
+
+  const allAppRows = useMemo(
+    () => [...(Array.isArray(appliedProjects) ? appliedProjects : []), ...(Array.isArray(completedProjects) ? completedProjects : [])],
+    [appliedProjects, completedProjects]
+  );
+
   const appliedRows = useMemo(() =>
     appliedProjects.filter((item) => ["PENDING", "REJECTED"].includes(String(item?.status || "").toUpperCase()))
   , [appliedProjects]);
 
-  /* Cancelled rows — show in dedicated tab only */
   const cancelledRows = useMemo(() =>
     appliedProjects.filter((item) => {
       const appStatus = String(item?.status || "").toUpperCase();
@@ -519,32 +542,63 @@ const ParticipantDashboard = () => {
     })
   , [appliedProjects]);
 
-  const approvedRows = useMemo(() =>
-    appliedProjects
-      .filter((item) => {
-        const appStatus = String(item?.status || "").toUpperCase();
-        if (appStatus !== "APPROVED") return false;
-        const allocStatus = String(item?.allocation?.status || "").toUpperCase();
-        if (item?.allocation?.id && allocStatus === "CANCELLED") return false;
-        // Exclude products that have moved to the Completed tab
-        const productId = item?.product_id || item?.project_products?.id;
-        if (productId && completedProductIds.has(productId)) return false;
-        return true;
-      })
-      .map((item) => ({
-        id: item.id,
-        allocationId: item?.allocation?.id || null,
-        allocationStatus: item?.allocation?.status || item?.status || "APPROVED",
-        productName: item?.project_products?.name || item?.product_name || "—",
-        brand: item?.projects?.title || item?.project_title || "—",
-        requestedAt: item?.reviewed_at || item?.created_at || null,
-      }))
-  , [appliedProjects]);
+  const approvedRows = useMemo(() => {
+    const latestByProduct = new Map();
+
+    for (const item of allAppRows) {
+      const wf = String(item?.workflow_status || "").toUpperCase();
+      const payout = String(item?.payout_status || "").toUpperCase();
+      const appStatus = String(item?.status || "").toUpperCase();
+
+      const isApprovedStage = wf
+        ? ["APPROVED", "SUBMITTED"].includes(wf)
+        : ["APPROVED", "PURCHASED", "COMPLETED"].includes(appStatus);
+      if (!isApprovedStage) continue;
+      if (wf === "COMPLETED" || payout === "PAID") continue;
+
+      const allocStatus = String(item?.allocation?.status || "").toUpperCase();
+      if (item?.allocation?.id && allocStatus === "CANCELLED") continue;
+
+      const productId = item?.product_id || item?.project_products?.id;
+      if (!productId) continue;
+      if (completedTabProductIds.has(productId)) continue;
+
+      const nextTime = new Date(item?.reviewed_at || item?.created_at || 0).getTime();
+      const existing = latestByProduct.get(productId);
+      const existingTime = new Date(existing?.reviewed_at || existing?.created_at || 0).getTime();
+      if (!existing || nextTime >= existingTime) latestByProduct.set(productId, item);
+    }
+
+    return Array.from(latestByProduct.values())
+      .sort((a, b) =>
+        new Date(b?.reviewed_at || b?.created_at || 0).getTime() -
+        new Date(a?.reviewed_at || a?.created_at || 0).getTime()
+      )
+      .map((item) => {
+        const wf = String(item?.workflow_status || "").toUpperCase();
+        const payout = String(item?.payout_status || "").toUpperCase();
+        const badgeStatus =
+          payout === "PAID" ? "COMPLETED" :
+          wf ? wf :
+          "APPROVED";
+
+        return {
+          id: item?.product_id || item?.project_products?.id || item.id,
+          allocationId: item?.allocation?.id || null,
+          badgeStatus,
+          productName: item?.project_products?.name || item?.product_name || "—",
+          brand: item?.projects?.title || item?.project_title || "—",
+          requestedAt: item?.reviewed_at || item?.created_at || null,
+        };
+      });
+  }, [allAppRows, completedTabProductIds]);
 
   const completedDisplayRows = useMemo(() => {
     const merged = new Map();
 
     for (const item of completedProjects) {
+      const wf = String(item?.workflow_status || "").toUpperCase();
+      if (wf && wf !== "COMPLETED") continue;
       const key = item?.id || `${item?.project_id || "na"}::${item?.product_id || "na"}::completed`;
       if (!merged.has(key)) merged.set(key, item);
     }
@@ -579,7 +633,7 @@ const ParticipantDashboard = () => {
     const token = getStoredToken();
     if (!token || !selectedProducts.length) return;
     setSendingRequest(true);
-    addToast(`Sending ${selectedProducts.length} request(s) to admin…`, "info");
+    addToast(`Sending ${selectedProducts.length} request(s) to admin...`, "info");
     try {
       const results = await Promise.allSettled(
         selectedProducts.map((item) =>
@@ -639,29 +693,29 @@ const ParticipantDashboard = () => {
     return (
       <div className="nd-loading-screen">
         <div className="nd-loading-spinner" />
-        <p>Loading your dashboard…</p>
+        <p>Loading your dashboard...</p>
       </div>
     );
   }
 
-  /* ─────────────────────────────────────────────────────────── */
+  /* ─────────────────────────────────────────────────────────────────────── */
   return (
     <div className="nd-dashboard">
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* ══ TOPBAR ══ */}
+      {/* ── TOPBAR ── */}
       <header className="nd-topbar">
         <div className="nd-brand">
           <span className="nd-brand-name">Nitro</span>
-          <span className="nd-brand-tag">Buy · Review · Earn</span>
+          <span className="nd-brand-tag">Buy - Review - Earn</span>
         </div>
 
         <div className="nd-search-wrap">
-          <span className="nd-search-icon">⌕</span>
+          <span className="nd-search-icon">🔍</span>
           <input
             type="text"
             className="nd-search"
-            placeholder="Search products or brands…"
+            placeholder="Search products or brands..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -669,8 +723,8 @@ const ParticipantDashboard = () => {
 
         <nav className="nd-nav">
           <button type="button" className="nd-nav-btn nd-nav-btn--active" onClick={() => navigate(path("dashboard"))}>Dashboard</button>
-          <button type="button" className="nd-nav-btn" onClick={() => { addToast("Opening Payouts page…", "info"); navigate(path("payouts")); }}>Payouts</button>
-          <button type="button" className="nd-nav-btn" onClick={() => { addToast("Opening your Profile…", "info"); navigate(path("profile")); }}>Profile</button>
+          <button type="button" className="nd-nav-btn" onClick={() => { addToast("Opening Payouts page...", "info"); navigate(path("payouts")); }}>Payouts</button>
+          <button type="button" className="nd-nav-btn" onClick={() => { addToast("Opening your Profile...", "info"); navigate(path("profile")); }}>Profile</button>
         </nav>
 
         <div className="nd-topbar-right">
@@ -727,7 +781,7 @@ const ParticipantDashboard = () => {
         </div>
       </header>
 
-      {/* ══ MAIN ══ */}
+      {/* ── MAIN ── */}
       <main className="nd-main">
 
         {/* ── Hero ── */}
@@ -753,7 +807,7 @@ const ParticipantDashboard = () => {
               <span className="nd-stat-label">Applied</span>
             </div>
             <div className="nd-stat-card">
-              <span className="nd-stat-num">{completedProjects.length}</span>
+              <span className="nd-stat-num">{completedDisplayRows.length}</span>
               <span className="nd-stat-label">Done</span>
             </div>
           </div>
@@ -770,9 +824,9 @@ const ParticipantDashboard = () => {
               <button
                 type="button"
                 className="nd-profile-cta"
-                onClick={() => { addToast("Opening your profile to complete it…", "info"); navigate(path("profile")); }}
+                onClick={() => { addToast("Opening your profile to complete it...", "info"); navigate(path("profile")); }}
               >
-                Complete Profile →
+                Complete Profile &rarr;
               </button>
             )}
           </div>
@@ -820,7 +874,7 @@ const ParticipantDashboard = () => {
           )}
         </div>
 
-        {/* ══ TAB: Browse Products ══ */}
+        {/* ── TAB: Browse Products ── */}
         {activeTab === "catalog" && (
           <div className="nd-tab-content">
             {filteredProducts.length === 0 ? (
@@ -832,7 +886,7 @@ const ParticipantDashboard = () => {
             ) : (
               <div className="nd-product-grid">
                 {filteredProducts.map((item) => {
-                  const latestApp = getLatestProductApplication(appliedProjects, item.id);
+                  const latestApp = getLatestProductApplication(allAppRows, item.id);
                   return (
                     <ProductCard
                       key={item.selection_key}
@@ -856,7 +910,7 @@ const ParticipantDashboard = () => {
           </div>
         )}
 
-        {/* ══ TAB: Approved ══ */}
+        {/* ── TAB: Approved ── */}
         {activeTab === "approved" && (
           <div className="nd-tab-content">
             {approvedRows.length === 0 ? (
@@ -875,7 +929,7 @@ const ParticipantDashboard = () => {
                       <span className="nd-list-card-project">{row.brand || "???"}</span>
                       <span className="nd-list-card-date">Approved {formatDateTime(row.requestedAt)}</span>
                     </div>
-                    <StatusBadge status={row.allocationStatus || "APPROVED"} />
+                    <StatusBadge status={row.badgeStatus || "APPROVED"} />
                     <div className="nd-list-card-action">
                       <button
                         type="button"
@@ -885,7 +939,7 @@ const ParticipantDashboard = () => {
                           navigate(path("allocation/active"));
                         }}
                       >
-                        Submit Invoice &amp; Review →
+                        Submit Invoice &amp; Review &rarr;
                       </button>
                     </div>
                   </div>
@@ -895,7 +949,7 @@ const ParticipantDashboard = () => {
           </div>
         )}
 
-        {/* ══ TAB: Cancelled ══ */}
+        {/* ── TAB: Cancelled ── */}
         {activeTab === "cancelled" && (
           <div className="nd-tab-content">
             {cancelledRows.length === 0 ? (
@@ -936,7 +990,7 @@ const ParticipantDashboard = () => {
           </div>
         )}
 
-        {/* ══ TAB: Applied ══ */}
+        {/* ── TAB: Applied ── */}
         {activeTab === "applied" && (
           <div className="nd-tab-content">
             {appliedRows.length === 0 ? (
@@ -985,12 +1039,12 @@ const ParticipantDashboard = () => {
           </div>
         )}
 
-        {/* ══ TAB: Completed ══ */}
+        {/* ── TAB: Completed ── */}
         {activeTab === "completed" && (
           <div className="nd-tab-content">
             {completedDisplayRows.length === 0 ? (
               <EmptyState
-                icon="🏆"
+                icon="★"
                 title="No completed campaigns yet"
                 subtitle="Complete your tasks and reviews — finished campaigns show up here."
               />
@@ -1054,7 +1108,7 @@ const ParticipantDashboard = () => {
               disabled={sendingRequest}
               onClick={sendRequest}
             >
-              {sendingRequest ? "Sending…" : "Send Request to Admin →"}
+              {sendingRequest ? "Sending..." : "Send Request to Admin &rarr;"}
             </button>
           </div>
         </div>
