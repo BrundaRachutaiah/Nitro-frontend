@@ -545,16 +545,20 @@ const ParticipantDashboard = () => {
   const approvedRows = useMemo(() => {
     const latestByProduct = new Map();
 
-    for (const item of allAppRows) {
+    for (const item of completedProjects) {
       const wf = String(item?.workflow_status || "").toUpperCase();
       const payout = String(item?.payout_status || "").toUpperCase();
       const appStatus = String(item?.status || "").toUpperCase();
 
-      const isApprovedStage = wf
-        ? ["APPROVED", "SUBMITTED"].includes(wf)
-        : ["APPROVED", "PURCHASED", "COMPLETED"].includes(appStatus);
-      if (!isApprovedStage) continue;
-      if (wf === "COMPLETED" || payout === "PAID") continue;
+      // Approved tab = admin-approved request, no invoice/review submitted yet.
+      const isApprovedApp = ["APPROVED", "PURCHASED"].includes(appStatus) || wf === "APPROVED";
+      if (!isApprovedApp) continue;
+
+      const hasAnyArtifact = Boolean(item?.proof_status) || Boolean(item?.review_status);
+      if (hasAnyArtifact) continue; // once submission starts, show in Completed tab flow
+
+      if (payout && ["ELIGIBLE", "IN_BATCH", "EXPORTED", "PAID"].includes(payout)) continue;
+      if (wf && wf !== "APPROVED") continue;
 
       const allocStatus = String(item?.allocation?.status || "").toUpperCase();
       if (item?.allocation?.id && allocStatus === "CANCELLED") continue;
@@ -575,37 +579,35 @@ const ParticipantDashboard = () => {
         new Date(a?.reviewed_at || a?.created_at || 0).getTime()
       )
       .map((item) => {
-        const wf = String(item?.workflow_status || "").toUpperCase();
-        const payout = String(item?.payout_status || "").toUpperCase();
-        const badgeStatus =
-          payout === "PAID" ? "COMPLETED" :
-          wf ? wf :
-          "APPROVED";
-
         return {
           id: item?.product_id || item?.project_products?.id || item.id,
           allocationId: item?.allocation?.id || null,
-          badgeStatus,
+          badgeStatus: "APPROVED",
           productName: item?.project_products?.name || item?.product_name || "—",
           brand: item?.projects?.title || item?.project_title || "—",
           requestedAt: item?.reviewed_at || item?.created_at || null,
         };
       });
-  }, [allAppRows, completedTabProductIds]);
+  }, [completedProjects, completedTabProductIds]);
 
   const completedDisplayRows = useMemo(() => {
     const merged = new Map();
 
     for (const item of completedProjects) {
       const wf = String(item?.workflow_status || "").toUpperCase();
-      if (wf && wf !== "COMPLETED") continue;
-      const key = item?.id || `${item?.project_id || "na"}::${item?.product_id || "na"}::completed`;
-      if (!merged.has(key)) merged.set(key, item);
-    }
+      const payout = String(item?.payout_status || "").toUpperCase();
+      const hasAnyArtifact = Boolean(item?.proof_status) || Boolean(item?.review_status);
+      const hasPayout = Boolean(payout);
 
-    for (const item of appliedProjects) {
-      if (String(item?.status || "").toUpperCase() !== "COMPLETED") continue;
-      const key = item?.id || `${item?.project_id || "na"}::${item?.product_id || "na"}::applied`;
+      // Completed tab shows the post-submission lifecycle (submitted → approved → paid).
+      // Exclude admin-approved requests that have no submission artifacts yet (those belong in Approved tab).
+      const showByWorkflow = wf
+        ? ["SUBMITTED", "APPROVED", "COMPLETED"].includes(wf)
+        : true;
+      if (!showByWorkflow) continue;
+      if (!hasAnyArtifact && !hasPayout) continue;
+
+      const key = item?.id || `${item?.project_id || "na"}::${item?.product_id || "na"}::completed`;
       if (!merged.has(key)) merged.set(key, item);
     }
 
@@ -614,7 +616,7 @@ const ParticipantDashboard = () => {
         new Date(b?.completed_at || b?.reviewed_at || b?.created_at || 0).getTime() -
         new Date(a?.completed_at || a?.reviewed_at || a?.created_at || 0).getTime()
     );
-  }, [appliedProjects, completedProjects]);
+  }, [completedProjects]);
 
   const getCompletedRowStatus = (item) => {
     const workflowStatus = String(item?.workflow_status || "").toUpperCase();
