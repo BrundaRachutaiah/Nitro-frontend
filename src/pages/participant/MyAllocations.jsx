@@ -344,24 +344,14 @@ const MyAllocations = () => {
   }, []);
 
   const historyData = useMemo(() => data.filter((r) => !ACTIVE_ALLOCATION_STATUSES.includes(String(r?.status || "").toUpperCase())), [data]);
-  const activeAllocations = useMemo(() => (
-  data.filter((r) =>
-    ACTIVE_ALLOCATION_STATUSES.includes(String(r?.status || "").toUpperCase())
-  )
-), [data]);
-const active = activeAllocations[0] || null;
-  const viewData = showHistory ? historyData : activeAllocations;
+  const active = useMemo(() => (
+    data.find((r) => ACTIVE_ALLOCATION_STATUSES.includes(String(r?.status || "").toUpperCase())) || data[0] || null
+  ), [data]);
+  const viewData = showHistory ? historyData : (active ? [active] : []);
   const products = useMemo(() => (
-  activeAllocations.flatMap((a) =>
-    (a.selected_products || []).map(p => ({
-      ...p,
-      _allocationId: a.id
-    }))
-  )
-), [activeAllocations]);
-  const status = activeAllocations.every(a => a.status === "PURCHASED")
-  ? "PURCHASED"
-  : "RESERVED";
+    Array.isArray(active?.selected_products) ? active.selected_products : []
+  ), [active]);
+  const status      = String(active?.status || "RESERVED").toUpperCase();
   const isCompleted = status === "COMPLETED";
   const isPurchaseConfirmed = useMemo(() => {
     if (!active?.id) return false;
@@ -372,8 +362,8 @@ const active = activeAllocations[0] || null;
       products.some((p) => proofDone(p.purchase_proof))
     );
   }, [active, purchased, products]);
-const activeProjectTitle = null;
-const activeProjectName = null;
+  const activeProjectTitle = active?.projects?.title || null;
+  const activeProjectName = active?.projects?.name || null;
   const projectName = useMemo(() => {
     const names = new Set(
       (Array.isArray(products) ? products : [])
@@ -397,8 +387,8 @@ const activeProjectName = null;
   const timeLeft = useMemo(() => {
     const _nowTick = tick;
     void _nowTick;
-    if (isCompleted || !activeAllocations[0]?.reserved_until) return { d:0, h:0, m:0, s:0 };
-    let diff = Math.max(0, new Date(activeAllocations[0].reserved_until).getTime() - Date.now());
+    if (isCompleted || !active?.reserved_until) return { d:0, h:0, m:0, s:0 };
+    let diff = Math.max(0, new Date(active.reserved_until).getTime() - Date.now());
     const d = Math.floor(diff / 864e5); diff -= d * 864e5;
     const h = Math.floor(diff / 36e5);  diff -= h * 36e5;
     const m = Math.floor(diff / 6e4);   diff -= m * 6e4;
@@ -413,34 +403,19 @@ const activeProjectName = null;
     payouts: id ? `/participant/${id}/payouts`                         : "/dashboard",
   };
 
-const confirmPurchase = async () => {
-  if (saving || !activeAllocations.length) return;
-
-  setSaving(true);
-
-  try {
-    for (const alloc of activeAllocations) {
-      await updateAllocationStatus(alloc.id, "PURCHASED");
-
-      setPurchased((prev) => ({
-        ...prev,
-        [alloc.id]: true,
-      }));
-    }
-
-    setData((prev) =>
-      prev.map((r) =>
-        activeAllocations.some((a) => a.id === r.id)
-          ? { ...r, status: "PURCHASED" }
-          : r
-      )
-    );
-  } catch (err) {
-    setError(err.response?.data?.message || "Could not update status.");
-  } finally {
-    setSaving(false);
-  }
-};
+  const confirmPurchase = async () => {
+    if (saving || !active?.id) return;
+    const allocationId = active.id;
+    setPurchased((prev) => ({ ...prev, [allocationId]: true }));
+    setSaving(true);
+    try {
+      await updateAllocationStatus(allocationId, "PURCHASED");
+      setData((prev) => prev.map((r) =>
+        r.id === allocationId ? { ...r, status: "PURCHASED" } : r
+      ));
+    } catch (err) { setError(err.response?.data?.message || "Could not update status."); }
+    finally { setSaving(false); }
+  };
 
   const handleConfirmSubmit = async () => {
     setConfirmBusy(true);
@@ -544,12 +519,7 @@ const confirmPurchase = async () => {
             <aside className="ma-sidebar">
               <div className="ma-panel">
                 <div className="ma-panel-label">📋 Campaign</div>
-                {[...new Map(activeAllocations.map(a => [a.projects?.id, a])).values()]
-  .map((alloc) => (
-    <div key={alloc.id} className="ma-campaign-name">
-      {alloc.projects?.title || alloc.projects?.name || "Campaign"}
-    </div>
-))}
+                <div className="ma-campaign-name">{projectName}</div>
                 <span className="ma-status-chip" style={{ background:`${chipColor(status)}22`, color:chipColor(status), border:`1px solid ${chipColor(status)}55` }}>{status}</span>
               </div>
 
@@ -649,7 +619,7 @@ const confirmPurchase = async () => {
                                 rel="noopener noreferrer"
                                 className="ma-product-link"
                               >
-                                purchaseButtonLabel(p?.project_mode || p?.projects?.mode)
+                                {purchaseButtonLabel(p?.project_mode || active?.projects?.mode)}
                               </a>
                             )}
                           </div>
@@ -784,7 +754,7 @@ const confirmPurchase = async () => {
                   {panel && panelProduct && (
                     <InlineTaskPanel
                       prod={panelProduct}
-                      allocId={panelProduct?._allocationId}
+                      allocId={active.id}
                       step={panel.step}
                       onStepChange={(s) => setPanel((p) => p ? { ...p, step: s } : null)}
                       onClose={() => setPanel(null)}
