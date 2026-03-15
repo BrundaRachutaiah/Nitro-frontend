@@ -14,7 +14,6 @@ const statusOf   = (x) => String(x?.status || "PENDING").toUpperCase();
 const purchaseButtonLabel = (mode) =>
   String(mode || "").toUpperCase() === "MARKETPLACE" ? "Buy on Amazon ↗" : "Buy via Brand Website ↗";
 
-/* ── Confirmation Modal ── */
 const ConfirmModal = ({ products, onClose, onConfirm, submitting }) => (
   <div className="ma-modal-overlay" onClick={onClose}>
     <div className="ma-modal" onClick={(e) => e.stopPropagation()}>
@@ -49,7 +48,6 @@ const ConfirmModal = ({ products, onClose, onConfirm, submitting }) => (
   </div>
 );
 
-/* ── Cancel Allocation Modal ── */
 const CancelModal = ({ projectName, products, onClose, onConfirm, busy }) => (
   <div className="ma-modal-overlay" onClick={onClose}>
     <div className="ma-modal" onClick={(e) => e.stopPropagation()}>
@@ -94,7 +92,6 @@ const CancelModal = ({ projectName, products, onClose, onConfirm, busy }) => (
   </div>
 );
 
-/* ── Inline Task Panel ── */
 const InlineTaskPanel = ({ prod, allocId, step, onStepChange, onClose, onDataUpdate }) => {
   const [invFile, setInvFile] = useState(null);
   const [invDrag, setInvDrag] = useState(false);
@@ -114,6 +111,7 @@ const InlineTaskPanel = ({ prod, allocId, step, onStepChange, onClose, onDataUpd
 
   const iDone = proofDone(prod?.purchase_proof);
   const rDone = reviewDone(prod?.review_submission);
+  const effectiveAllocId = prod?._allocationId || allocId;
 
   const handleInvoice = async (e) => {
     e.preventDefault();
@@ -122,8 +120,8 @@ const InlineTaskPanel = ({ prod, allocId, step, onStepChange, onClose, onDataUpd
     try {
       const fd = new FormData();
       fd.append("file", invFile);
-      await uploadPurchaseProof(prod._allocationId || allocId, fd, prod.product_id);
-      onDataUpdate((prev) => prev.map((row) => row.id !== (prod._allocationId || allocId) ? row : {
+      await uploadPurchaseProof(effectiveAllocId, fd, prod.product_id);
+      onDataUpdate((prev) => prev.map((row) => row.id !== effectiveAllocId ? row : {
         ...row,
         selected_products: (row.selected_products || []).map((p) =>
           p.product_id === prod.product_id ? { ...p, purchase_proof: { status: "PENDING", created_at: new Date().toISOString() } } : p
@@ -145,30 +143,26 @@ const InlineTaskPanel = ({ prod, allocId, step, onStepChange, onClose, onDataUpd
       if (revFiles.length > 0) {
         const fd = new FormData();
         revFiles.forEach((f) => fd.append("files", f));
-        const up = await uploadReviewProofs(prod._allocationId || allocId, fd, prod.product_id);
+        const up = await uploadReviewProofs(effectiveAllocId, fd, prod.product_id);
         const urls = Array.isArray(up?.data?.data?.review_urls) ? up.data.data.review_urls : [];
         if (urls[0]) finalUrl = finalUrl || urls[0];
         const extra = urls.slice(1);
         if (extra.length) finalText = finalText ? `${finalText}\n\nExtra screenshots:\n${extra.join("\n")}` : `Screenshots:\n${extra.join("\n")}`;
       }
-      await submitReview({ allocationId: prod._allocationId || allocId, productId: prod.product_id || undefined, reviewText: finalText, reviewUrl: finalUrl });
-      const effectiveAllocId = prod._allocationId || allocId;
-      onDataUpdate((prev) => prev.map((row) => row.id !== effectiveAllocId ? row : {
+      await submitReview({ allocationId: effectiveAllocId, productId: prod.product_id || undefined, reviewText: finalText, reviewUrl: finalUrl });
+      onDataUpdate((prev) => prev.map((row) => row.id !== effectiveAllocId ? row : ({
         ...row,
         selected_products: (row.selected_products || []).map((p) =>
           p.product_id === prod.product_id ? { ...p, review_submission: { status: "PENDING", created_at: new Date().toISOString(), review_url: finalUrl } } : p
         )
-      }));
+      })));
       setRevMsg("✅ Review submitted! Awaiting admin approval.");
       setRevUrl(""); setRevText(""); setRevFiles([]);
       setTimeout(() => onClose(), 1400);
     } catch (err) {
       const msg = err.response?.data?.message || "Submission failed.";
-      const alreadyDone = /already submitted/i.test(msg);
-      if (alreadyDone) {
-        // The review was already submitted (e.g. from another tab/session).
-        // Treat it as a success: update local state so the UI shows it as done.
-        onDataUpdate((prev) => prev.map((row) => row.id !== (prod._allocationId || allocId) ? row : ({
+      if (/already submitted/i.test(msg)) {
+        onDataUpdate((prev) => prev.map((row) => row.id !== effectiveAllocId ? row : ({
           ...row,
           selected_products: (row.selected_products || []).map((p) =>
             p.product_id === prod.product_id ? { ...p, review_submission: { status: "PENDING", created_at: new Date().toISOString() } } : p
@@ -207,7 +201,11 @@ const InlineTaskPanel = ({ prod, allocId, step, onStepChange, onClose, onDataUpd
               <div>
                 <strong>Invoice already uploaded</strong>
                 <p>Status: <span className="ma-inline-status-chip">{statusOf(prod.purchase_proof)}</span></p>
-                {prod.purchase_proof?.file_url && <a href={prod.purchase_proof.file_url} target="_blank" rel="noreferrer" className="ma-inline-view-link">View uploaded invoice →</a>}
+                {prod.purchase_proof?.file_url && (
+                  <a href={prod.purchase_proof.file_url} target="_blank" rel="noreferrer" className="ma-inline-view-link">
+                    View uploaded invoice →
+                  </a>
+                )}
               </div>
               <button type="button" className="ma-inline-btn-primary" onClick={() => onStepChange("review")}>Go to Review →</button>
             </div>
@@ -240,7 +238,7 @@ const InlineTaskPanel = ({ prod, allocId, step, onStepChange, onClose, onDataUpd
                 )}
                 <input key={invKey} id={`inv-${invKey}-${prod.product_id}`} type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={(e) => setInvFile(e.target.files[0])} />
               </div>
-              <div className="ma-inline-tip">💡 Upload your <strong>Amazon order confirmation</strong> — make sure the product name and price are clearly visible.</div>
+              <div className="ma-inline-tip">💡 Upload your <strong>order confirmation</strong> — make sure the product name and price are clearly visible.</div>
               <button type="submit" className="ma-inline-btn-primary" disabled={!invFile || invBusy}>{invBusy ? "Uploading…" : "Upload Invoice →"}</button>
             </form>
           )}
@@ -261,7 +259,11 @@ const InlineTaskPanel = ({ prod, allocId, step, onStepChange, onClose, onDataUpd
               <div>
                 <strong>Review already submitted</strong>
                 <p>Status: <span className="ma-inline-status-chip">{statusOf(prod.review_submission)}</span></p>
-                {prod.review_submission?.review_url && <a href={prod.review_submission.review_url} target="_blank" rel="noreferrer" className="ma-inline-view-link">View submitted review →</a>}
+                {prod.review_submission?.review_url && (
+                  <a href={prod.review_submission.review_url} target="_blank" rel="noreferrer" className="ma-inline-view-link">
+                    View submitted review →
+                  </a>
+                )}
               </div>
               <button type="button" className="ma-inline-btn-secondary" onClick={onClose}>Close Panel</button>
             </div>
@@ -270,7 +272,7 @@ const InlineTaskPanel = ({ prod, allocId, step, onStepChange, onClose, onDataUpd
               {revErr && <div className="ma-inline-error">{revErr}</div>}
               {revMsg && <div className="ma-inline-success">{revMsg}</div>}
               <div className="ma-inline-field">
-                <label className="ma-inline-label">Review URL <span className="ma-inline-label-hint">(paste your Amazon review link)</span></label>
+                <label className="ma-inline-label">Review URL <span className="ma-inline-label-hint">(paste your review link)</span></label>
                 <input type="url" className="ma-inline-input" placeholder="https://www.amazon.in/review/..." value={revUrl} onChange={(e) => setRevUrl(e.target.value)} />
               </div>
               <div className="ma-inline-or-divider"><span>or</span></div>
@@ -296,32 +298,32 @@ const InlineTaskPanel = ({ prod, allocId, step, onStepChange, onClose, onDataUpd
   );
 };
 
-/* ════════════════════════════════════════════════
-   MAIN COMPONENT
-   ════════════════════════════════════════════════ */
 const MyAllocations = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { id }   = useParams();
   const query    = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const showHistory  = query.get("view") === "history";
+  const showHistory = query.get("view") === "history";
 
-  const [data,      setData]      = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState("");
-  const [saving,    setSaving]    = useState(false);
-  const [purchased, setPurchased] = useState({});
-  const [panel,     setPanel]     = useState(null); // { prodId, step }
+  const [data,         setData]         = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState("");
+  const [saving,       setSaving]       = useState(false);
+  const [purchased,    setPurchased]    = useState({});
+  const [panel,        setPanel]        = useState(null);
   const [showConfirm,  setShowConfirm]  = useState(false);
   const [confirmBusy,  setConfirmBusy]  = useState(false);
   const [showCancel,   setShowCancel]   = useState(false);
   const [cancelBusy,   setCancelBusy]   = useState(false);
   const [cancelError,  setCancelError]  = useState("");
-  const [tick, setTick] = useState(0);
+  const [tick,         setTick]         = useState(0);
 
   const storageKey = `${PURCHASE_KEY_PREFIX}${id || "x"}`;
 
-  useEffect(() => { const t = setInterval(() => setTick((p) => p + 1), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    const t = setInterval(() => setTick((p) => p + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     try { const r = localStorage.getItem(storageKey); if (r) setPurchased(JSON.parse(r) || {}); } catch { setPurchased({}); }
@@ -338,47 +340,66 @@ const MyAllocations = () => {
         const res  = await getMyAllocationTracking();
         const rows = Array.isArray(res.data?.data) ? res.data.data : [];
         setData(rows);
-      } catch (err) { setError(err.response?.data?.message || "Failed to load tasks."); }
-      finally { setLoading(false); }
+      } catch (err) {
+        setError(err.response?.data?.message || "Failed to load tasks.");
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 
-  const historyData = useMemo(() => data.filter((r) => !ACTIVE_ALLOCATION_STATUSES.includes(String(r?.status || "").toUpperCase())), [data]);
-  const active = useMemo(() => (
-    data.find((r) => ACTIVE_ALLOCATION_STATUSES.includes(String(r?.status || "").toUpperCase())) || data[0] || null
-  ), [data]);
-  const viewData = showHistory ? historyData : (active ? [active] : []);
-  const products = useMemo(() => (
-    Array.isArray(active?.selected_products) ? active.selected_products : []
-  ), [active]);
-  const status      = String(active?.status || "RESERVED").toUpperCase();
-  const isCompleted = status === "COMPLETED";
+  const historyData = useMemo(() =>
+    data.filter((r) => !ACTIVE_ALLOCATION_STATUSES.includes(String(r?.status || "").toUpperCase())),
+    [data]
+  );
+
+  const activeAllocations = useMemo(() =>
+    data.filter((r) => ACTIVE_ALLOCATION_STATUSES.includes(String(r?.status || "").toUpperCase())),
+    [data]
+  );
+
+  const active = activeAllocations[0] || data[0] || null;
+
+  const viewData = showHistory ? historyData : (activeAllocations.length > 0 ? activeAllocations : []);
+
+  const products = useMemo(() => {
+    const all = [];
+    for (const alloc of activeAllocations) {
+      const prods = Array.isArray(alloc.selected_products) ? alloc.selected_products : [];
+      for (const p of prods) {
+        all.push({ ...p, _allocationId: alloc.id });
+      }
+    }
+    return all;
+  }, [activeAllocations]);
+
+  const status = String(active?.status || "RESERVED").toUpperCase();
+
+  const isCompleted = activeAllocations.length > 0 &&
+    activeAllocations.every((a) => String(a?.status || "").toUpperCase() === "COMPLETED");
+
   const isPurchaseConfirmed = useMemo(() => {
-    if (!active?.id) return false;
-    return (
-      Boolean(purchased[active.id]) ||
-      String(active?.status || "").toUpperCase() === "PURCHASED" ||
-      String(active?.status || "").toUpperCase() === "COMPLETED" ||
-      products.some((p) => proofDone(p.purchase_proof))
+    if (activeAllocations.length === 0) return false;
+    return activeAllocations.every((alloc) =>
+      Boolean(purchased[alloc.id]) ||
+      ["PURCHASED", "COMPLETED"].includes(String(alloc?.status || "").toUpperCase()) ||
+      (Array.isArray(alloc.selected_products) && alloc.selected_products.some((p) => proofDone(p.purchase_proof)))
     );
-  }, [active, purchased, products]);
-  const activeProjectTitle = active?.projects?.title || null;
-  const activeProjectName = active?.projects?.name || null;
+  }, [activeAllocations, purchased]);
+
   const projectName = useMemo(() => {
     const names = new Set(
-      (Array.isArray(products) ? products : [])
-        .map((p) => String(p?.project_title || "").trim())
-        .filter(Boolean)
+      products.map((p) => String(p?.project_title || "").trim()).filter(Boolean)
     );
     if (names.size > 1) return "Multiple campaigns";
     if (names.size === 1) return Array.from(names)[0];
-    return activeProjectTitle || activeProjectName || "Campaign";
-  }, [products, activeProjectTitle, activeProjectName]);
-  const totalValue  = products.reduce((s, p) => s + Number(p?.product_value || 0), 0);
-  const allInvDone  = products.length > 0 && products.every((p) => proofDone(p.purchase_proof));
-  const allRevDone  = products.length > 0 && products.every((p) => reviewDone(p.review_submission));
-  const allDone     = allInvDone && allRevDone;
-  // True when every invoice AND review has been explicitly APPROVED by admin (not just submitted)
+    return active?.projects?.title || active?.projects?.name || "Campaign";
+  }, [products, active]);
+
+  const totalValue = products.reduce((s, p) => s + Number(p?.product_value || 0), 0);
+  const allInvDone = products.length > 0 && products.every((p) => proofDone(p.purchase_proof));
+  const allRevDone = products.length > 0 && products.every((p) => reviewDone(p.review_submission));
+  const allDone    = allInvDone && allRevDone;
   const allApproved = products.length > 0 && products.every(
     (p) => statusOf(p.purchase_proof) === "APPROVED" && statusOf(p.review_submission) === "APPROVED"
   );
@@ -387,34 +408,43 @@ const MyAllocations = () => {
   const timeLeft = useMemo(() => {
     const _nowTick = tick;
     void _nowTick;
-    if (isCompleted || !active?.reserved_until) return { d:0, h:0, m:0, s:0 };
-    let diff = Math.max(0, new Date(active.reserved_until).getTime() - Date.now());
+    if (isCompleted) return { d: 0, h: 0, m: 0, s: 0 };
+    const deadlines = activeAllocations
+      .map((a) => a.reserved_until)
+      .filter(Boolean)
+      .map((d) => new Date(d).getTime());
+    if (!deadlines.length) return { d: 0, h: 0, m: 0, s: 0 };
+    let diff = Math.max(0, Math.min(...deadlines) - Date.now());
     const d = Math.floor(diff / 864e5); diff -= d * 864e5;
     const h = Math.floor(diff / 36e5);  diff -= h * 36e5;
     const m = Math.floor(diff / 6e4);   diff -= m * 6e4;
     const s = Math.floor(diff / 1e3);
     return { d, h, m, s };
-  }, [active, isCompleted, tick]);
+  }, [activeAllocations, isCompleted, tick]);
 
   const P = {
-    dash:    id ? `/participant/${id}/dashboard`                       : "/dashboard",
-    tasks:   id ? `/participant/${id}/allocation/active`               : "/dashboard",
-    history: id ? `/participant/${id}/allocation/active?view=history`  : "/dashboard",
-    payouts: id ? `/participant/${id}/payouts`                         : "/dashboard",
+    dash:    id ? `/participant/${id}/dashboard`                      : "/dashboard",
+    tasks:   id ? `/participant/${id}/allocation/active`              : "/dashboard",
+    history: id ? `/participant/${id}/allocation/active?view=history` : "/dashboard",
+    payouts: id ? `/participant/${id}/payouts`                        : "/dashboard",
   };
 
   const confirmPurchase = async () => {
-    if (saving || !active?.id) return;
-    const allocationId = active.id;
-    setPurchased((prev) => ({ ...prev, [allocationId]: true }));
+    if (saving) return;
     setSaving(true);
     try {
-      await updateAllocationStatus(allocationId, "PURCHASED");
-      setData((prev) => prev.map((r) =>
-        r.id === allocationId ? { ...r, status: "PURCHASED" } : r
-      ));
-    } catch (err) { setError(err.response?.data?.message || "Could not update status."); }
-    finally { setSaving(false); }
+      for (const alloc of activeAllocations) {
+        setPurchased((prev) => ({ ...prev, [alloc.id]: true }));
+        await updateAllocationStatus(alloc.id, "PURCHASED");
+        setData((prev) => prev.map((r) =>
+          r.id === alloc.id ? { ...r, status: "PURCHASED" } : r
+        ));
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || "Could not update status.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleConfirmSubmit = async () => {
@@ -426,24 +456,21 @@ const MyAllocations = () => {
   };
 
   const handleCancel = async () => {
-    // Capture allocationId synchronously before any async work
-    const allocationId = active?.id;
-    if (!allocationId) {
+    if (activeAllocations.length === 0) {
       setCancelError("Could not find your allocation. Please refresh and try again.");
       return;
     }
     setCancelBusy(true);
     setCancelError("");
     try {
-      await cancelAllocation(allocationId);
+      for (const alloc of activeAllocations) {
+        await cancelAllocation(alloc.id);
+      }
       setShowCancel(false);
       setCancelBusy(false);
       navigate(P.dash);
     } catch (err) {
-      console.error('[Cancel] Error:', err?.response?.status, err?.response?.data);
-      const msg = err?.response?.data?.message
-        || err?.message
-        || "Failed to cancel. Please refresh and try again.";
+      const msg = err?.response?.data?.message || err?.message || "Failed to cancel. Please refresh and try again.";
       setCancelError(msg);
       setCancelBusy(false);
     }
@@ -451,30 +478,42 @@ const MyAllocations = () => {
 
   const history = useMemo(() => {
     const rows = [];
-    if (!active) return rows;
-
-    const prods = Array.isArray(active?.selected_products) ? active.selected_products : [null];
-    prods.forEach((p, i) => {
-      const proof    = p?.purchase_proof    || (p === null ? active?.purchase_proof    : null);
-      const review   = p?.review_submission || (p === null ? active?.review_submission : null);
-      const feedback = p?.feedback_submission || (p === null ? active?.feedback_submission : null);
-      const pname    = p?.product_name ? ` · ${p.product_name}` : "";
-      const key      = `${active.id}-${i}`;
-      if (proof?.created_at)    rows.push({ key:`proof-${key}`,    at: proof.created_at,    label: `Invoice Uploaded${pname}`,    status: statusOf(proof) });
-      if (review?.created_at)   rows.push({ key:`review-${key}`,   at: review.created_at,   label: `Review Submitted${pname}`,   status: statusOf(review) });
-      if (feedback?.created_at) rows.push({ key:`feedback-${key}`, at: feedback.created_at, label: `Feedback Submitted${pname}`, status: "SUBMITTED" });
-    });
+    for (const alloc of activeAllocations) {
+      const prods = Array.isArray(alloc?.selected_products) ? alloc.selected_products : [null];
+      prods.forEach((p, i) => {
+        const proof    = p?.purchase_proof    || (p === null ? alloc?.purchase_proof    : null);
+        const review   = p?.review_submission || (p === null ? alloc?.review_submission : null);
+        const feedback = p?.feedback_submission || (p === null ? alloc?.feedback_submission : null);
+        const pname = p?.product_name ? ` · ${p.product_name}` : "";
+        const key   = `${alloc.id}-${i}`;
+        if (proof?.created_at)    rows.push({ key: `proof-${key}`,    at: proof.created_at,    label: `Invoice Uploaded${pname}`,    status: statusOf(proof) });
+        if (review?.created_at)   rows.push({ key: `review-${key}`,   at: review.created_at,   label: `Review Submitted${pname}`,   status: statusOf(review) });
+        if (feedback?.created_at) rows.push({ key: `feedback-${key}`, at: feedback.created_at, label: `Feedback Submitted${pname}`, status: "SUBMITTED" });
+      });
+    }
     return rows.sort((a, b) => new Date(b.at) - new Date(a.at));
-  }, [active]);
+  }, [activeAllocations]);
 
-  const chipColor = (s) => ({ APPROVED:"#22c55e", PENDING:"#f59e0b", REJECTED:"#ef4444", SUBMITTED:"#3b82f6", COMPLETED:"#10b981", PURCHASED:"#06b6d4", RESERVED:"#06b6d4", EXPIRED:"#f97316", CANCELLED:"#e74c3c" }[s] || "#94a3b8");
+  const chipColor = (s) => ({
+    APPROVED: "#22c55e", PENDING: "#f59e0b", REJECTED: "#ef4444",
+    SUBMITTED: "#3b82f6", COMPLETED: "#10b981", PURCHASED: "#06b6d4",
+    RESERVED: "#06b6d4", EXPIRED: "#f97316", CANCELLED: "#e74c3c"
+  }[s] || "#94a3b8");
 
   const panelProduct = panel ? products.find((p) => p.product_id === panel.prodId) || null : null;
 
   return (
     <div className="ma-page">
       <header className="ma-topbar">
-        <div className="ma-brand" onClick={() => navigate(P.dash)} role="button" tabIndex={0} onKeyDown={(e) => e.key==="Enter" && navigate(P.dash)}>Nitro</div>
+        <div
+          className="ma-brand"
+          onClick={() => navigate(P.dash)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && navigate(P.dash)}
+        >
+          Nitro
+        </div>
         <nav className="ma-nav">
           <button type="button" onClick={() => navigate(P.dash)}>Dashboard</button>
           <button type="button" className={!showHistory ? "active" : ""} onClick={() => navigate(P.tasks)}>My Tasks</button>
@@ -491,8 +530,13 @@ const MyAllocations = () => {
           </div>
         </div>
 
-        {loading && <div className="ma-loading"><div className="ma-spinner" /><span>Loading your tasks…</span></div>}
-        {error   && <div className="ma-error">{error}</div>}
+        {loading && (
+          <div className="ma-loading">
+            <div className="ma-spinner" />
+            <span>Loading your tasks…</span>
+          </div>
+        )}
+        {error && <div className="ma-error">{error}</div>}
 
         {!loading && !data.length && (
           <div className="ma-empty">
@@ -520,16 +564,25 @@ const MyAllocations = () => {
               <div className="ma-panel">
                 <div className="ma-panel-label">📋 Campaign</div>
                 <div className="ma-campaign-name">{projectName}</div>
-                <span className="ma-status-chip" style={{ background:`${chipColor(status)}22`, color:chipColor(status), border:`1px solid ${chipColor(status)}55` }}>{status}</span>
+                <span
+                  className="ma-status-chip"
+                  style={{
+                    background: `${chipColor(status)}22`,
+                    color: chipColor(status),
+                    border: `1px solid ${chipColor(status)}55`
+                  }}
+                >
+                  {status}
+                </span>
               </div>
 
               {!showHistory && !isCompleted && (
                 <div className="ma-panel">
                   <div className="ma-panel-label">⏰ Time Remaining</div>
                   <div className="ma-timer">
-                    {[["d","DAYS"],["h","HRS"],["m","MIN"],["s","SEC"]].map(([k,label]) => (
+                    {[["d", "DAYS"], ["h", "HRS"], ["m", "MIN"], ["s", "SEC"]].map(([k, label]) => (
                       <div key={k} className="ma-timer-cell">
-                        <strong>{String(timeLeft[k]).padStart(2,"0")}</strong>
+                        <strong>{String(timeLeft[k]).padStart(2, "0")}</strong>
                         <span>{label}</span>
                       </div>
                     ))}
@@ -564,7 +617,6 @@ const MyAllocations = () => {
                 </div>
               )}
 
-              {/* Cancel Reservation — only show if slot is still cancellable */}
               {!showHistory && !allDone && ["RESERVED", "PURCHASED"].includes(status) && (
                 <div className="ma-panel" style={{ marginTop: "8px" }}>
                   <div className="ma-panel-label" style={{ color: "#e74c3c" }}>⚠️ Cancel Reservation</div>
@@ -573,9 +625,11 @@ const MyAllocations = () => {
                     The budget will be returned to the project pool.
                   </p>
                   {cancelError && (
-                    <div style={{ fontSize: "13px", color: "#c0392b", background: "#fff0f0",
-                                  border: "1px solid #e74c3c", borderRadius: "8px",
-                                  padding: "8px 12px", marginBottom: "10px" }}>
+                    <div style={{
+                      fontSize: "13px", color: "#c0392b", background: "#fff0f0",
+                      border: "1px solid #e74c3c", borderRadius: "8px",
+                      padding: "8px 12px", marginBottom: "10px"
+                    }}>
                       {cancelError}
                     </div>
                   )}
@@ -596,37 +650,46 @@ const MyAllocations = () => {
             </aside>
 
             <div className="ma-content">
-              {/* STEP 1: Purchase */}
               {!showHistory && !isPurchaseConfirmed && (
                 <div className="ma-card ma-card-active">
                   <div className="ma-card-step-num">Step 1</div>
                   <h2 className="ma-card-title">Confirm Your Purchase</h2>
-                  <p className="ma-card-sub">Buy all approved products on Amazon using your own account, then confirm below to unlock the next steps.</p>
+                  <p className="ma-card-sub">
+                    Buy all approved products using your own account, then confirm below to unlock the next steps.
+                  </p>
                   {products.length > 0 && (
                     <div className="ma-product-list">
                       <div className="ma-product-list-label">Products to buy ({products.length})</div>
-                      {products.map((p, i) => (
-                        <div key={p.product_id || i} className="ma-product-row">
-                          <div className="ma-product-row-name">
-                            <span>{p.product_name || "Product"}</span>
-                            <small style={{ display: "block", color: "#9aa3b2" }}>
-                              {p?.project_title || p?.projects?.title || projectName}
-                            </small>
-                            {p.product_url && (
-                              <a
-                                href={p.product_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="ma-product-link"
-                              >
-                                {purchaseButtonLabel(p?.project_mode || active?.projects?.mode)}
-                              </a>
-                            )}
-                          </div>
-                          <div className="ma-product-row-price">{fmt(p.product_value)}</div>
-                        </div>
-                      ))}
-                      <div className="ma-product-total"><span>Total to spend</span><strong>{fmt(totalValue)}</strong></div>
+                     {products.map((p, i) => (
+  <div key={p.product_id || i} className="ma-product-row">
+    <div className="ma-product-row-name">
+      <span>{p.product_name || "Product"}</span>
+
+      <small style={{ display: "block", color: "#9aa3b2" }}>
+        {p?.project_title || p?.projects?.title || projectName}
+      </small>
+
+      {p.product_url && (
+        <a
+          href={p.product_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ma-product-link"
+        >
+          {purchaseButtonLabel(p?.project_mode)}
+        </a>
+      )}
+    </div>
+
+    <div className="ma-product-row-price">
+      {fmt(p.product_value)}
+    </div>
+  </div>
+))}
+                      <div className="ma-product-total">
+                        <span>Total to spend</span>
+                        <strong>{fmt(totalValue)}</strong>
+                      </div>
                     </div>
                   )}
                   <button type="button" className="ma-btn-primary" onClick={confirmPurchase} disabled={saving}>
@@ -635,16 +698,16 @@ const MyAllocations = () => {
                 </div>
               )}
 
-              {/* STEP 2+3: Per-product uploads */}
               {!showHistory && isPurchaseConfirmed && (
                 <div className="ma-card">
                   <div className="ma-card-step-num">Steps 2 &amp; 3</div>
                   <h2 className="ma-card-title">Upload Invoice &amp; Review — Per Product</h2>
-                  <p className="ma-card-sub">Each product needs its own invoice upload and review submission. Complete both for every product.</p>
+                  <p className="ma-card-sub">
+                    Each product needs its own invoice upload and review submission. Complete both for every product.
+                  </p>
 
-                  {/* ── All tasks admin-approved: show completed state ── */}
                   {allApproved ? (
-                    <div className="ma-all-approved-banner" style={{
+                    <div style={{
                       marginTop: "20px", padding: "28px 24px", borderRadius: "16px",
                       background: "linear-gradient(135deg, #0d2d1a 0%, #0a1f12 100%)",
                       border: "1.5px solid #22c55e44", textAlign: "center"
@@ -657,7 +720,6 @@ const MyAllocations = () => {
                         All your invoices and reviews have been approved by admin.<br />
                         Your payout is being processed — check your payout status below.
                       </p>
-                      {/* Show product summary */}
                       <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
                         {products.map((p, i) => (
                           <div key={p.product_id || i} style={{
@@ -683,112 +745,119 @@ const MyAllocations = () => {
                     </div>
                   ) : (
                     <>
-                  <div className="ma-per-product-grid">
-                    {products.length > 0 ? products.map((prod, i) => {
-                      const inv   = prod?.purchase_proof;
-                      const rev   = prod?.review_submission;
-                      const iDone = proofDone(inv);
-                      const rDone = reviewDone(rev);
-                      const pId   = prod?.product_id || "";
-                      const isPanelOpen = panel?.prodId === pId;
+                      <div className="ma-per-product-grid">
+                        {products.length > 0 ? products.map((prod, i) => {
+                          const inv  = prod?.purchase_proof;
+                          const rev  = prod?.review_submission;
+                          const iDone = proofDone(inv);
+                          const rDone = reviewDone(rev);
+                          const pId   = prod?.product_id || "";
+                          const isPanelOpen = panel?.prodId === pId;
 
-                      return (
-                        <div key={pId || i} className={`ma-prod-card ${iDone && rDone ? "ma-prod-done" : ""}`}>
-                          <div className="ma-prod-num">{iDone && rDone ? "✓" : i + 1}</div>
-                          <div className="ma-prod-body">
-                            <div className="ma-prod-name">{prod.product_name || "Product"}</div>
-                            <div className="ma-prod-price" style={{ marginTop: "-2px", marginBottom: "6px", fontSize: "12px", color: "#9aa3b2" }}>
-                              {prod?.project_title || prod?.projects?.title || projectName}
+                          return (
+                            <div key={pId || i} className={`ma-prod-card ${iDone && rDone ? "ma-prod-done" : ""}`}>
+                              <div className="ma-prod-num">{iDone && rDone ? "✓" : i + 1}</div>
+                              <div className="ma-prod-body">
+                                <div className="ma-prod-name">{prod.product_name || "Product"}</div>
+                                <div className="ma-prod-price" style={{ marginTop: "-2px", marginBottom: "6px", fontSize: "12px", color: "#9aa3b2" }}>
+                                  {prod?.project_title || prod?.projects?.title || projectName}
+                                </div>
+                                <div className="ma-prod-price">{fmt(prod.product_value)}</div>
+                                <div className="ma-prod-steps">
+                                  <div className={`ma-prod-step ${iDone ? "done" : "todo"}`}>
+                                    <div className="ma-prod-step-icon">{iDone ? "✅" : "📄"}</div>
+                                    <div className="ma-prod-step-info">
+                                      <div className="ma-prod-step-label">Invoice Upload</div>
+                                      <div className="ma-prod-step-status">
+                                        {iDone ? (statusOf(inv) === "APPROVED" ? "Approved ✓" : "⏳ Under Review") : "Not Uploaded"}
+                                      </div>
+                                    </div>
+                                    {!iDone && (
+                                      <button
+                                        type="button"
+                                        className={`ma-prod-btn ${isPanelOpen && panel?.step === "invoice" ? "active-btn" : ""}`}
+                                        onClick={() => isPanelOpen && panel.step === "invoice" ? setPanel(null) : setPanel({ prodId: pId, step: "invoice" })}
+                                      >
+                                        {isPanelOpen && panel?.step === "invoice" ? "Close ✕" : "Upload Invoice →"}
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className={`ma-prod-step ${rDone ? "done" : iDone ? "todo" : "locked"}`}>
+                                    <div className="ma-prod-step-icon">{rDone ? "✅" : iDone ? "⭐" : "🔒"}</div>
+                                    <div className="ma-prod-step-info">
+                                      <div className="ma-prod-step-label">Review Submission</div>
+                                      <div className="ma-prod-step-status">
+                                        {rDone ? (statusOf(rev) === "APPROVED" ? "Approved ✓" : "⏳ Under Review") : iDone ? "Ready to submit" : "Upload Invoice First"}
+                                      </div>
+                                    </div>
+                                    {iDone && !rDone && (
+                                      <button
+                                        type="button"
+                                        className={`ma-prod-btn ${isPanelOpen && panel?.step === "review" ? "active-btn" : ""}`}
+                                        onClick={() => isPanelOpen && panel.step === "review" ? setPanel(null) : setPanel({ prodId: pId, step: "review" })}
+                                      >
+                                        {isPanelOpen && panel?.step === "review" ? "Close ✕" : "Submit Review →"}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                            <div className="ma-prod-price">{fmt(prod.product_value)}</div>
-                            <div className="ma-prod-steps">
-                              {/* Invoice */}
-                              <div className={`ma-prod-step ${iDone ? "done" : "todo"}`}>
-                                <div className="ma-prod-step-icon">{iDone ? "✅" : "📄"}</div>
-                                <div className="ma-prod-step-info">
-                                  <div className="ma-prod-step-label">Invoice Upload</div>
-                                  <div className="ma-prod-step-status">
-                                    {iDone ? (statusOf(inv) === "APPROVED" ? "Approved ✓" : "⏳ Under Review") : "Not Uploaded"}
-                                  </div>
-                                </div>
-                                {!iDone && (
-                                  <button type="button" className={`ma-prod-btn ${isPanelOpen && panel?.step === "invoice" ? "active-btn" : ""}`}
-                                    onClick={() => isPanelOpen && panel.step === "invoice" ? setPanel(null) : setPanel({ prodId: pId, step: "invoice" })}>
-                                    {isPanelOpen && panel?.step === "invoice" ? "Close ✕" : "Upload Invoice →"}
-                                  </button>
-                                )}
-                              </div>
-                              {/* Review */}
-                              <div className={`ma-prod-step ${rDone ? "done" : iDone ? "todo" : "locked"}`}>
-                                <div className="ma-prod-step-icon">{rDone ? "✅" : iDone ? "⭐" : "🔒"}</div>
-                                <div className="ma-prod-step-info">
-                                  <div className="ma-prod-step-label">Review Submission</div>
-                                  <div className="ma-prod-step-status">
-                                    {rDone ? (statusOf(rev) === "APPROVED" ? "Approved ✓" : "⏳ Under Review") : iDone ? "Ready to submit" : "Upload Invoice First"}
-                                  </div>
-                                </div>
-                                {iDone && !rDone && (
-                                  <button type="button" className={`ma-prod-btn ${isPanelOpen && panel?.step === "review" ? "active-btn" : ""}`}
-                                    onClick={() => isPanelOpen && panel.step === "review" ? setPanel(null) : setPanel({ prodId: pId, step: "review" })}>
-                                    {isPanelOpen && panel?.step === "review" ? "Close ✕" : "Submit Review →"}
-                                  </button>
-                                )}
-                              </div>
+                          );
+                        }) : (
+                          <div className="ma-prod-card">
+                            <div className="ma-prod-body" style={{ paddingLeft: 0 }}>
+                              <div className="ma-prod-name">{projectName}</div>
+                              <button
+                                type="button"
+                                className="ma-btn-primary"
+                                onClick={() => navigate(`/participant/${id}/product-task/${active?.id}`)}
+                              >
+                                Upload Invoice &amp; Review →
+                              </button>
                             </div>
                           </div>
-                        </div>
-                      );
-                    }) : (
-                      <div className="ma-prod-card">
-                        <div className="ma-prod-body" style={{ paddingLeft: 0 }}>
-                          <div className="ma-prod-name">{projectName}</div>
-                          <button type="button" className="ma-btn-primary" onClick={() => navigate(`/participant/${id}/product-task/${active.id}`)}>
-                            Upload Invoice &amp; Review →
-                          </button>
-                        </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  {/* Inline panel */}
-                  {panel && panelProduct && (
-                    <InlineTaskPanel
-                      prod={panelProduct}
-                      allocId={active.id}
-                      step={panel.step}
-                      onStepChange={(s) => setPanel((p) => p ? { ...p, step: s } : null)}
-                      onClose={() => setPanel(null)}
-                      onDataUpdate={setData}
-                    />
-                  )}
+                      {panel && panelProduct && (
+                        <InlineTaskPanel
+                          prod={panelProduct}
+                          allocId={panelProduct._allocationId || active?.id}
+                          step={panel.step}
+                          onStepChange={(s) => setPanel((p) => p ? { ...p, step: s } : null)}
+                          onClose={() => setPanel(null)}
+                          onDataUpdate={setData}
+                        />
+                      )}
 
-                  {/* Submit all / progress banner */}
-                  {anyUploaded && (
-                    <div className="ma-submit-all-wrap">
-                      {allDone ? (
-                        <div className="ma-all-done-banner">
-                          🎉 All invoices and reviews submitted!{" "}
-                          <button type="button" className="ma-link-btn" onClick={() => setShowConfirm(true)}>Review &amp; Confirm Submission →</button>
-                        </div>
-                      ) : (
-                        <div className="ma-partial-submit-banner">
-                          <span className="ma-partial-info">
-                            {products.filter((p) => proofDone(p.purchase_proof)).length}/{products.length} invoices ·{" "}
-                            {products.filter((p) => reviewDone(p.review_submission)).length}/{products.length} reviews submitted
-                          </span>
-                          <button type="button" className="ma-submit-all-btn" onClick={() => setShowConfirm(true)}>
-                            Review &amp; Submit to Admin →
-                          </button>
+                      {anyUploaded && (
+                        <div className="ma-submit-all-wrap">
+                          {allDone ? (
+                            <div className="ma-all-done-banner">
+                              🎉 All invoices and reviews submitted!{" "}
+                              <button type="button" className="ma-link-btn" onClick={() => setShowConfirm(true)}>
+                                Review &amp; Confirm Submission →
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="ma-partial-submit-banner">
+                              <span className="ma-partial-info">
+                                {products.filter((p) => proofDone(p.purchase_proof)).length}/{products.length} invoices ·{" "}
+                                {products.filter((p) => reviewDone(p.review_submission)).length}/{products.length} reviews submitted
+                              </span>
+                              <button type="button" className="ma-submit-all-btn" onClick={() => setShowConfirm(true)}>
+                                Review &amp; Submit to Admin →
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
-                    </div>
-                  )}
                     </>
                   )}
                 </div>
               )}
 
-              {/* History */}
               <div className="ma-card">
                 <h2 className="ma-card-title">📋 Submission History</h2>
                 {history.length === 0 ? (
@@ -800,7 +869,9 @@ const MyAllocations = () => {
                         <div className="ma-history-dot" style={{ background: chipColor(row.status) }} />
                         <div className="ma-history-info">
                           <div className="ma-history-label">{row.label}</div>
-                          <div className="ma-history-time">{new Date(row.at).toLocaleString("en-IN", { dateStyle:"medium", timeStyle:"short" })}</div>
+                          <div className="ma-history-time">
+                            {new Date(row.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                          </div>
                         </div>
                         <span className="ma-history-status" style={{ color: chipColor(row.status) }}>{row.status}</span>
                       </div>
