@@ -155,7 +155,7 @@ const CARD_META = {
   COMPLETED: { pill: "★ Completed",                                  pillCls: "nd-pill--done",         canSelect: true,  canTask: false },
 };
 
-const ProductCard = ({ item, isSelected, latestApplication, completedProductIds, onSelect, onNavigate, addToast }) => {
+const ProductCard = ({ item, isSelected, latestApplication, completedProductIds, onSelect, onNavigate, addToast, quantity = 1, onQuantityChange }) => {
   const cardState = resolveCardState(latestApplication, completedProductIds);
   const { pill, pillCls, canSelect, canTask } = CARD_META[cardState];
 
@@ -240,6 +240,47 @@ const ProductCard = ({ item, isSelected, latestApplication, completedProductIds,
           </span>
           <span className="nd-card-price">
             {formatInr(item?.price ?? item?.product_value ?? item?.product_price)}
+
+{/* Quantity selector */}
+{onQuantityChange && (
+  <div style={{
+    display: 'flex', alignItems: 'center', gap: '8px',
+    margin: '8px 0', justifyContent: 'center'
+  }}>
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onQuantityChange(Math.max(1, quantity - 1)); }}
+      style={{
+        width: '28px', height: '28px', borderRadius: '50%',
+        border: '1px solid #3b82f6', background: quantity <= 1 ? '#1e293b' : '#3b82f6',
+        color: '#fff', fontWeight: 700, fontSize: '16px',
+        cursor: quantity <= 1 ? 'not-allowed' : 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}
+      disabled={quantity <= 1}
+    >−</button>
+    <span style={{ color: '#e2e8f0', fontWeight: 700, minWidth: '20px', textAlign: 'center' }}>
+      {quantity}
+    </span>
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onQuantityChange(Math.min(10, quantity + 1)); }}
+      style={{
+        width: '28px', height: '28px', borderRadius: '50%',
+        border: '1px solid #3b82f6', background: '#3b82f6',
+        color: '#fff', fontWeight: 700, fontSize: '16px',
+        cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}
+    >+</button>
+  </div>
+)}
+
+{quantity > 1 && (
+  <div style={{ fontSize: '11px', color: '#22c55e', fontWeight: 600, textAlign: 'center', marginBottom: '4px' }}>
+    Total: {formatInr((item?.price ?? item?.product_value ?? 0) * quantity)}
+  </div>
+)}
           </span>
         </div>
 
@@ -294,6 +335,7 @@ const ParticipantDashboard = () => {
   const [completedProjects, setCompletedProjects] = useState([]);
   const [dashboardProducts, setDashboardProducts] = useState([]);
   const [selectedProductKeys, setSelectedProductKeys] = useState([]);
+  const [productQuantities, setProductQuantities] = useState({}); 
   const [sendingRequest, setSendingRequest]       = useState(false);
   const [searchTerm, setSearchTerm]   = useState("");
   const [clientFilter, setClientFilter] = useState("ALL");
@@ -646,7 +688,10 @@ const ParticipantDashboard = () => {
           fetchJson(`/projects/${item.project_id}/apply`, token, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ productId: item.id || item.product_id }),
+            body: JSON.stringify({
+  productId: item.id || item.product_id,
+  quantity: productQuantities[item.selection_key] || 1
+}),
           })
         )
       );
@@ -895,20 +940,31 @@ const ParticipantDashboard = () => {
                   const latestApp = getLatestProductApplication(allAppRows, item.id);
                   return (
                     <ProductCard
-                      key={item.selection_key}
-                      item={item}
-                      isSelected={selectedProductKeys.includes(item.selection_key)}
-                      latestApplication={latestApp}
-                      completedProductIds={completedProductIds}
-                      addToast={addToast}
-                      onSelect={(key) => setSelectedProductKeys((prev) =>
-                        prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-                      )}
-                      onNavigate={(allocId) => {
-                        if (allocId) navigate(`${path("allocation/active")}?allocation=${allocId}`);
-                        else navigate(path("allocation/active"));
-                      }}
-                    />
+  key={item.selection_key || item.id}
+  item={item}
+  isSelected={selectedProductKeys.includes(item.selection_key)}
+  latestApplication={getLatestProductApplication(allAppRows, item.id)}
+  completedProductIds={completedProductIds}
+  onSelect={(key) => {
+    setSelectedProductKeys((prev) =>
+      prev.includes(key)
+        ? prev.filter((k) => k !== key)
+        : [...prev, key]
+    );
+  }}
+  onNavigate={(allocId) => navigate(path("allocation/active"))}
+  addToast={addToast}
+  quantity={productQuantities[item.selection_key] || 1}
+  onQuantityChange={(newQty) => {
+    setProductQuantities((prev) => ({
+      ...prev,
+      [item.selection_key]: newQty
+    }));
+    if (newQty > 1 && !selectedProductKeys.includes(item.selection_key)) {
+      setSelectedProductKeys((prev) => [...prev, item.selection_key]);
+    }
+  }}
+/>
                   );
                 })}
               </div>
