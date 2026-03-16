@@ -524,7 +524,7 @@ const ProductApplications = () => {
                                 <input
                                   type="checkbox"
                                   checked={!!selectedRows[row.id]}
-                                  disabled={!isPending || !!workingId}
+                                  disabled={!isPending || (!!workingId && workingId !== `approve-${row.id}` && workingId !== `reject-${row.id}`)}
                                   onChange={(e) => toggleRow(row, e.target.checked)}
                                   aria-label={`Select ${row?.project_products?.name || "product"}`}
                                 />
@@ -555,7 +555,7 @@ const ProductApplications = () => {
                                     <button
                                       type="button"
                                       className="su-action-btn su-action-btn--approve"
-                                      disabled={!!workingId || !canApprove}
+                                      disabled={(!!workingId && workingId !== `approve-${row.id}`) || !canApprove}
                                       onClick={() => setConfirmModal({ action: "approve", id: row.id, row, name: section.participant_name || "participant", product: row?.project_products?.name, budget })}
                                     >
                                       <Icon name="check" size={13} /> Approve
@@ -563,7 +563,7 @@ const ProductApplications = () => {
                                     <button
                                       type="button"
                                       className="su-action-btn su-action-btn--reject"
-                                      disabled={!!workingId}
+                                      disabled={!!workingId && workingId !== `reject-${row.id}`}
                                       onClick={() => setConfirmModal({ action: "reject", id: row.id, name: section.participant_name || "participant", product: row?.project_products?.name })}
                                     >
                                       <Icon name="x" size={13} /> Reject

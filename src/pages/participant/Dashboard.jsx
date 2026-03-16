@@ -152,7 +152,7 @@ const CARD_META = {
   CANCELLED: { pill: "✕ Allocation Cancelled",                      pillCls: "nd-pill--rejected",     canSelect: true,  canTask: false },
   PURCHASED: { pill: "🛒 Product Purchased — Complete Your Tasks",   pillCls: "nd-pill--purchased",    canSelect: false, canTask: true  },
   REJECTED:  { pill: "✕ Request Rejected",                          pillCls: "nd-pill--rejected",     canSelect: true,  canTask: false },
-  COMPLETED: { pill: "★ Completed",                                  pillCls: "nd-pill--done",         canSelect: true,  canTask: false },
+  COMPLETED: { pill: "★ Completed",                                  pillCls: "nd-pill--done",         canSelect: false, canTask: false },
 };
 
 const ProductCard = ({ item, isSelected, latestApplication, completedProductIds, onSelect, onNavigate, addToast, quantity = 1, onQuantityChange }) => {
@@ -161,7 +161,6 @@ const ProductCard = ({ item, isSelected, latestApplication, completedProductIds,
 
   const actionLabel = () => {
     if (isSelected) return "✓ Selected";
-    if (cardState === "COMPLETED") return "Request Again";
     if (cardState === "CANCELLED") return "Request Again";
     if (cardState === "REJECTED")  return "Send New Request";
     return "Select Product";

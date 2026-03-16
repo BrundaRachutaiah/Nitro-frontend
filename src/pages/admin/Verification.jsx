@@ -715,7 +715,7 @@ const Verifications = () => {
                               {renderActionState(
                                 invoiceState,
                                 <ActionButtons
-                                  disabled={processingKey?.startsWith("invoice:")}
+                                  disabled={processingKey === `invoice:${row.invoice.id}:approve` || processingKey === `invoice:${row.invoice.id}:reject`}
                                   onApprove={() => handleProofStatus(row.invoice.id, "approve")}
                                   onReject={() => handleProofStatus(row.invoice.id, "reject")}
                                 />
@@ -753,7 +753,7 @@ const Verifications = () => {
                               {renderActionState(
                                 reviewState,
                                 <ActionButtons
-                                  disabled={processingKey?.startsWith("review:")}
+                                  disabled={processingKey === `review:${row.review.id}:approve` || processingKey === `review:${row.review.id}:reject`}
                                   onApprove={() => handleReviewStatus(row.review.id, "approve")}
                                   onReject={() => handleReviewStatus(row.review.id, "reject")}
                                 />
