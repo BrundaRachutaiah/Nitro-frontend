@@ -130,6 +130,9 @@ const Dashboard = () => {
   const [activeNav, setActiveNav] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  // ── NEW: Payout reminder popup state (SUPER_ADMIN only) ──────
+  const [showPayoutPopup, setShowPayoutPopup]           = useState(false);
+  const [payoutPopupDismissed, setPayoutPopupDismissed] = useState(false);
   const datePickerRef = useRef(null);
 
 
@@ -229,6 +232,21 @@ const Dashboard = () => {
   }, []);
 
 
+  // ── NEW: Show payout popup for SUPER_ADMIN once per session ──
+  useEffect(() => {
+    const eligible     = toNum(summary?.payouts_eligible || 0);
+    const isSuperAdmin = String(user?.role || "").toUpperCase() === "SUPER_ADMIN";
+    if (isSuperAdmin && eligible > 0 && !payoutPopupDismissed) {
+      setShowPayoutPopup(true);
+    }
+  }, [summary, user, payoutPopupDismissed]);
+
+  const dismissPayoutPopup = () => {
+    setShowPayoutPopup(false);
+    setPayoutPopupDismissed(true);
+  };
+
+
   const handleLogout = async () => {
     const token = getStoredToken();
     await signOutFromSupabase(token);
@@ -312,6 +330,87 @@ const Dashboard = () => {
 
   return (
     <div className="sa-dashboard">
+
+      {/* ══ ELIGIBLE PAYOUT REMINDER POPUP — SUPER_ADMIN only ══ */}
+      {showPayoutPopup && (
+        <div style={{
+          position:"fixed", inset:0, zIndex:9999,
+          background:"rgba(0,0,0,0.65)", backdropFilter:"blur(4px)",
+          display:"flex", alignItems:"center", justifyContent:"center", padding:"20px"
+        }}>
+          <div style={{
+            background:"#0d1117", border:"1px solid rgba(23,200,239,0.3)",
+            borderRadius:"16px", padding:"32px", maxWidth:"460px", width:"100%",
+            boxShadow:"0 20px 60px rgba(0,0,0,0.5)",
+            position:"relative", fontFamily:"'Outfit',sans-serif"
+          }}>
+            {/* Close button */}
+            <button type="button" onClick={dismissPayoutPopup} style={{
+              position:"absolute", top:"14px", right:"16px",
+              background:"none", border:"none", cursor:"pointer",
+              color:"#6b7280", fontSize:"18px", lineHeight:1, padding:"4px"
+            }}>✕</button>
+
+            {/* Icon */}
+            <div style={{
+              width:"52px", height:"52px", borderRadius:"14px",
+              background:"rgba(23,200,239,0.1)", border:"1px solid rgba(23,200,239,0.2)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:"22px", marginBottom:"18px"
+            }}>💰</div>
+
+            {/* Heading */}
+            <h2 style={{ margin:"0 0 8px", fontSize:"1.2rem", fontWeight:800, color:"#f9fafb" }}>
+              {toNum(summary?.payouts_eligible)} Payout{toNum(summary?.payouts_eligible) !== 1 ? "s" : ""} Awaiting Processing
+            </h2>
+            <p style={{ margin:"0 0 20px", fontSize:"0.88rem", color:"#9ca3af", lineHeight:1.65 }}>
+              There {toNum(summary?.payouts_eligible) === 1 ? "is" : "are"}&nbsp;
+              <strong style={{ color:"#17c8ef" }}>
+                {toNum(summary?.payouts_eligible)} eligible payout{toNum(summary?.payouts_eligible) !== 1 ? "s" : ""}
+              </strong> ready to be batched. Participants have completed all required submissions and are waiting for reimbursement.
+            </p>
+
+            {/* Info box */}
+            <div style={{
+              background:"rgba(23,200,239,0.06)", border:"1px solid rgba(23,200,239,0.14)",
+              borderRadius:"10px", padding:"14px 16px", marginBottom:"24px",
+              display:"flex", alignItems:"center", gap:"12px"
+            }}>
+              <span style={{ fontSize:"1.4rem" }}>⏳</span>
+              <div>
+                <div style={{ fontSize:"0.72rem", color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700, marginBottom:"3px" }}>
+                  Action Required
+                </div>
+                <div style={{ fontSize:"0.86rem", color:"#e5e7eb" }}>
+                  Create a payout batch to disburse funds to participants
+                </div>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display:"flex", gap:"12px", flexWrap:"wrap" }}>
+              <button type="button"
+                onClick={() => { dismissPayoutPopup(); navigate("/admin/payouts"); }}
+                style={{
+                  flex:1, minWidth:"140px", padding:"12px 20px", borderRadius:"10px",
+                  background:"linear-gradient(135deg,#17c8ef,#0ea5c9)",
+                  border:"none", color:"#fff", fontSize:"0.9rem", fontWeight:700, cursor:"pointer"
+                }}
+              >
+                Process Payouts →
+              </button>
+              <button type="button" onClick={dismissPayoutPopup} style={{
+                padding:"12px 20px", borderRadius:"10px",
+                background:"transparent", border:"1px solid rgba(255,255,255,0.1)",
+                color:"#9ca3af", fontSize:"0.9rem", fontWeight:600, cursor:"pointer"
+              }}>
+                Remind me later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ══ TOPBAR ══ */}
       <header className="sa-topbar">
         <button type="button" className="sa-menu-btn" onClick={() => setIsSidebarOpen(v => !v)} aria-label="Toggle menu">
@@ -714,4 +813,3 @@ const Dashboard = () => {
 
 
 export default Dashboard;
-
