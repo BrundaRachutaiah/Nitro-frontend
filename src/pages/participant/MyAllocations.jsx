@@ -683,6 +683,11 @@ const MyAllocations = () => {
 
     <div className="ma-product-row-price">
       {fmt(p.product_value)}
+      {(p.quantity > 1) && (
+        <div style={{ fontSize: '11px', color: '#9aa3b2', marginTop: '2px' }}>
+          {p.quantity} × {fmt(p.unit_price)}
+        </div>
+      )}
     </div>
   </div>
 ))}

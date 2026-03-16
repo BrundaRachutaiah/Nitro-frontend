@@ -30,7 +30,13 @@ const getRequestDate = (row) => {
   }
   return row?.updated_at || row?.created_at || null;
 };
-const getAutoAllocated = (row) => toAmount(row?.suggested_allocated_budget ?? row?.requested_amount ?? row?.project_products?.product_value);
+const getAutoAllocated = (row) => {
+  if (row?.suggested_allocated_budget) return toAmount(row.suggested_allocated_budget);
+  if (row?.requested_amount) return toAmount(row.requested_amount);
+  const base = toAmount(row?.project_products?.product_value);
+  const qty = Math.max(1, Number(row?.quantity || 1));
+  return base * qty;
+};
 
 const Icon = ({ name, size = 18 }) => {
   const p = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" };
@@ -311,7 +317,14 @@ const ProductApplications = () => {
                     <div className="sa-td-muted" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                       <span>Project budget: <strong style={{ color: "var(--green)" }}>{fmtCurrency(confirmModal.row?.project_budget)}</strong></span>
                       <span>Remaining: <strong style={{ color: "var(--green)" }}>{fmtCurrency(confirmModal.row?.project_remaining_budget)}</strong></span>
-                      <span>Requested: <strong>{fmtCurrency(confirmModal.row?.requested_amount)}</strong></span>
+                      <span>
+  Requested: <strong>{fmtCurrency(confirmModal.row?.requested_amount)}</strong>
+  {(confirmModal.row?.quantity > 1) && (
+    <span style={{ fontSize: '12px', color: '#9aa3b2', marginLeft: '6px' }}>
+      ({confirmModal.row?.quantity} units × {fmtCurrency((confirmModal.row?.requested_amount || 0) / (confirmModal.row?.quantity || 1))})
+    </span>
+  )}
+</span>
                     </div>
 
                     {toAmount(confirmModal.budget) > toAmount(confirmModal.row?.project_remaining_budget) && (
@@ -525,7 +538,14 @@ const ProductApplications = () => {
                                   ? <a href={row.project_products.product_url} target="_blank" rel="noreferrer" className="pd-ext-link"><Icon name="link" size={12} /> Open</a>
                                   : <span className="sa-td-muted">-</span>}
                               </td>
-                              <td className="sa-td-bold">{fmtCurrency(row?.requested_amount)}</td>
+                              <td className="sa-td-bold">
+  {fmtCurrency(row?.requested_amount)}
+  {(row?.quantity > 1) && (
+    <div style={{ fontSize: '11px', color: '#9aa3b2', fontWeight: 400, marginTop: '2px' }}>
+      {row?.quantity} × {fmtCurrency((row?.requested_amount || 0) / (row?.quantity || 1))}
+    </div>
+  )}
+</td>
                               <td><span className="sa-td-bold" style={{ color: "var(--green)" }}>{fmtCurrency(budget)}</span></td>
                               <td className="sa-td-muted">{fmtCurrency(remainingBudget)}</td>
                               <td className="sa-td-muted">{fmtDate(getRequestDate(row))}</td>
