@@ -173,6 +173,8 @@ const PayoutStatus = () => {
                     <tr>
                       <th>Campaign</th>
                       <th>Product</th>
+                      <th>Qty</th>
+                      <th>Unit Price</th>
                       <th>Amount</th>
                       <th>Status</th>
                       <th>Note</th>
@@ -184,10 +186,14 @@ const PayoutStatus = () => {
                       const title = item?.projects?.title || item?.projects?.name || "Campaign";
                       const productName = item?.project_products?.name || item?.product_name || "—";
                       const { label, cls, icon } = getStatusMeta(item?.status);
+                      const qty       = Number(item?.quantity || 1);
+                      const unitPrice = Number(item?.unit_price || item?.project_products?.product_value || 0);
                       return (
                         <tr key={item.id}>
                           <td>{title}</td>
                           <td>{productName}</td>
+                          <td className="pp-qty">{qty}</td>
+                          <td className="pp-unit-price">{formatCurrency(unitPrice)}</td>
                           <td className="pp-amount">{formatCurrency(item?.product_amount ?? item?.amount ?? 0)}</td>
                           <td>
                             <span className={`participant-payout-status ${cls}`}>

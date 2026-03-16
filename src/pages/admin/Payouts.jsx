@@ -319,7 +319,7 @@ export default function AdminPayouts() {
 
         .pay-product-row{
           display:grid;
-          grid-template-columns:1fr 160px 120px;
+          grid-template-columns:1fr 80px 110px 110px 120px;
           gap:1rem;align-items:center;
           padding:10px 16px;border-bottom:1px solid var(--border);
           font-size:0.84rem;
@@ -412,7 +412,7 @@ export default function AdminPayouts() {
 
         @media(max-width:640px){
           .pay-stat-row{grid-template-columns:1fr}
-          .pay-product-row{grid-template-columns:1fr 100px}
+          .pay-product-row{grid-template-columns:1fr 60px 80px}
           .pay-batch-head{grid-template-columns:auto 1fr auto}
           .pay-pib-bank{gap:1rem}
           .pay-batch-actions{flex-wrap:wrap}
@@ -577,13 +577,25 @@ export default function AdminPayouts() {
 
                       {/* product rows */}
                         {p.rows.map((row, ri) => {
-                        // Best available product name — backend returns product_name directly
                         const productName =
                           row.product_name ||
                           row.projects?.product_name ||
                           null;
                         const projectTitle = row.projects?.title || row.projects?.name || null;
-                        const productVal = Number(row.product_amount || row.amount || 0);
+                        // product_amount from backend is ALWAYS unit_price × quantity (recomputed)
+                        const totalVal     = Number(row.product_amount || row.amount || 0);
+                        const unitPriceRaw = Number(row.unit_price || 0);
+                        // quantity: use what backend sends; if 1 but total > unit_price, infer it
+                        const rawQty = Number(row.quantity || 1);
+                        const qty = rawQty > 1
+                          ? rawQty
+                          : (unitPriceRaw > 0 && totalVal > unitPriceRaw)
+                            ? Math.round(totalVal / unitPriceRaw)
+                            : rawQty;
+                        // per-unit price
+                        const perUnit = unitPriceRaw > 0
+                          ? unitPriceRaw
+                          : (qty > 0 ? totalVal / qty : totalVal);
 
                         return (
                           <div key={row.id || ri} className="pay-product-row">
@@ -600,7 +612,15 @@ export default function AdminPayouts() {
                                 )}
                               </div>
                             </div>
-                            <div className="pay-product-val">{fmt(productVal)}</div>
+                            <div style={{ color: "var(--text-3)", fontSize: "0.8rem", textAlign: "right" }}>
+                              <div style={{ fontWeight: 700, color: "var(--text-2)" }}>× {qty}</div>
+                              <div style={{ fontSize: "0.68rem" }}>units</div>
+                            </div>
+                            <div style={{ color: "var(--text-3)", fontSize: "0.8rem", textAlign: "right" }}>
+                              <div>{fmt(perUnit)}</div>
+                              <div style={{ fontSize: "0.68rem" }}>unit price</div>
+                            </div>
+                            <div className="pay-product-val">{fmt(totalVal)}</div>
                             <div className="pay-product-status">
                               <span className="sa-status-badge sa-mode-badge--d2c" style={{ fontSize: "0.68rem" }}>
                                 {row.status || "ELIGIBLE"}

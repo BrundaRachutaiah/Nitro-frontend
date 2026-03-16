@@ -129,7 +129,7 @@
 .participant-payout-table-card table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 980px;
+  min-width: 1100px;
 }
 
 .participant-payout-table-card th,
@@ -243,8 +243,10 @@
 .pp-refresh-btn:hover { border-color: rgba(23,200,239,0.5); color: #17c8ef; }
 
 /* ── Amount / Note cells ── */
-.pp-amount { font-weight: 700; color: #17c8ef; }
-.pp-note   { font-size: 0.82rem; color: #7a9db0; max-width: 200px; }
+.pp-amount     { font-weight: 700; color: #17c8ef; }
+.pp-qty        { font-weight: 700; color: #e3f1f8; text-align: center; }
+.pp-unit-price { font-size: 0.84rem; color: #99b7c6; }
+.pp-note       { font-size: 0.82rem; color: #7a9db0; max-width: 200px; }
 
 /* ── Table footer notice ── */
 .pp-table-notice {
