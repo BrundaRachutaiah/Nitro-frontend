@@ -768,7 +768,7 @@ export default function AdminPayouts() {
                                     <div className="pay-pib-email">{p.email || "—"}</div>
                                   </div>
                                   <div style={{ textAlign: "right" }}>
-                                    <div style={{ fontSize: "0.68rem", color: "var(--text-3)", marginBottom: 3 }}>Product Amount</div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-3)", marginBottom: 3 }}>Total Amount</div>
                                     <div className="pay-pib-total">{fmt(p.product_amount)}</div>
                                     <span className={batchStatusBadge(p.payout_status)} style={{ fontSize: "0.65rem", marginTop: 4, display: "inline-block" }}>
                                       {p.payout_status || "IN_BATCH"}
@@ -806,7 +806,7 @@ export default function AdminPayouts() {
                                   <div className="pay-no-bank">⚠ Bank details not available for this participant.</div>
                                 )}
 
-                                {/* product purchased + amount — no reward, product cost only */}
+                                {/* product purchased + amount with quantity breakdown */}
                                 <div className="pay-pib-products">
                                   <div className="pay-pib-product">
                                     <div className="pay-pib-pname">
@@ -816,9 +816,30 @@ export default function AdminPayouts() {
                                         : <em style={{ color: "var(--text-3)", fontStyle: "italic" }}>Product name unavailable</em>
                                       }
                                     </div>
-                                    <div className="pay-pib-pval">{fmt(p.product_amount)}</div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "10px", justifyContent: "flex-end" }}>
+                                      {(() => {
+                                        const bTotal   = Number(p.product_amount || 0);
+                                        const bUnit    = Number(p.unit_price || 0);
+                                        // Qty from backend, or infer: total/unit_price
+                                        const fromBack = Math.max(1, Number(p.quantity || 1));
+                                        const inferred = bUnit > 0 && bTotal > 0
+                                          ? Math.round(bTotal / bUnit)
+                                          : fromBack;
+                                        const finalQty = inferred > 1 ? inferred : fromBack;
+                                        const perUnit  = bUnit > 0 ? bUnit : (finalQty > 0 ? bTotal / finalQty : bTotal);
+                                        return (
+                                          <>
+                                            {finalQty > 1 && (
+                                              <span style={{ fontSize: "0.75rem", color: "var(--text-3)" }}>
+                                                {fmt(perUnit)} × {finalQty} units
+                                              </span>
+                                            )}
+                                            <div className="pay-pib-pval">{fmt(bTotal)}</div>
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
                                   </div>
-
                                 </div>
                               </div>
                             ))
