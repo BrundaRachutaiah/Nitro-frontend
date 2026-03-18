@@ -456,6 +456,34 @@ const Dashboard = () => {
               <span>{totalApprovals} pending</span>
             </button>
           )}
+
+          {/* Participant View button — only for SUPER_ADMIN */}
+          {user?.role === "SUPER_ADMIN" && (
+            <button
+              type="button"
+              title="View platform as a participant"
+              onClick={() => {
+                sessionStorage.setItem("nitro_participant_mode", "1");
+                navigate(`/participant/${user.id}/dashboard`, { replace: true });
+              }}
+              style={{
+                background: "rgba(23,208,242,0.08)",
+                border: "1.5px solid rgba(23,208,242,0.5)",
+                borderRadius: 8, color: "#17d0f2",
+                fontWeight: 700, fontSize: "0.78rem",
+                padding: "7px 14px", cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 6,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              Participant View
+            </button>
+          )}
+
           <div className="sa-user-pill">
             <div className="sa-user-avatar">
               {String(user?.full_name || user?.email || "A")[0].toUpperCase()}

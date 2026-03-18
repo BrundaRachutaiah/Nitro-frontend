@@ -366,8 +366,14 @@ const ParticipantDashboard = () => {
     try {
       const backendUser = await verifyBackendUser(token);
       const role = backendUser?.role?.toUpperCase?.() || "";
-      if (role === "ADMIN" || role === "SUPER_ADMIN") { navigate("/dashboard", { replace: true }); return; }
-      if (role !== "PARTICIPANT") throw new Error("Unsupported role.");
+      if (role === "ADMIN") { navigate("/dashboard", { replace: true }); return; }
+      if (role === "SUPER_ADMIN") {
+        if (sessionStorage.getItem("nitro_participant_mode") !== "1") {
+          navigate("/dashboard", { replace: true });
+          return;
+        }
+      }
+      if (role !== "PARTICIPANT" && role !== "SUPER_ADMIN") throw new Error("Unsupported role.");
       setUser(backendUser);
 
       const [profileRes, meRes, activeRes, appliedRes, completedRes, catalogRes] = await Promise.all([
@@ -833,6 +839,42 @@ const ParticipantDashboard = () => {
 
       {/* ── MAIN ── */}
       <main className="nd-main">
+
+        {/* ── Super Admin "Viewing as Participant" banner ── */}
+        {sessionStorage.getItem("nitro_participant_mode") === "1" && (
+          <div style={{
+            background: "linear-gradient(135deg,#1a1a2e,#0f3460)",
+            border: "1.5px solid rgba(233,69,96,0.5)",
+            borderRadius: 10, padding: "12px 20px", marginBottom: 20,
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 18 }}>👁</span>
+              <div>
+                <span style={{ color: "#fff", fontWeight: 700, fontSize: "0.9rem" }}>
+                  Viewing as Participant
+                </span>
+                <span style={{ color: "#9aa3b2", fontSize: "0.8rem", marginLeft: 8 }}>
+                  You are browsing the participant experience as Super Admin
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                sessionStorage.removeItem("nitro_participant_mode");
+                navigate("/dashboard", { replace: true });
+              }}
+              style={{
+                background: "rgba(233,69,96,0.15)", border: "1.5px solid #e94560",
+                borderRadius: 8, color: "#e94560", fontWeight: 700,
+                fontSize: "0.82rem", padding: "7px 16px", cursor: "pointer", whiteSpace: "nowrap",
+              }}
+            >
+              ← Back to Admin
+            </button>
+          </div>
+        )}
 
         {/* ── Hero ── */}
         <section className="nd-hero">

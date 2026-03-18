@@ -163,6 +163,9 @@ const DashboardRoute = () => {
   }
 
   if (user.role === "SUPER_ADMIN") {
+    if (sessionStorage.getItem("nitro_participant_mode") === "1") {
+      return <Navigate to={`/participant/${user.id}/dashboard`} replace />;
+    }
     return <Navigate to={`/super-admin/${user.id}/dashboard`} replace />;
   }
 
@@ -308,7 +311,16 @@ const ParticipantDashboardRoute = () => {
 
   if (isChecking) return <div className="admin-loading">Checking access...</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (String(user.role || "").toUpperCase() !== "PARTICIPANT") return <Navigate to="/dashboard" replace />;
+
+  const role = String(user.role || "").toUpperCase();
+  const participantMode = sessionStorage.getItem("nitro_participant_mode") === "1";
+
+  if (role === "SUPER_ADMIN" && participantMode) {
+    if (id !== user.id) return <Navigate to={`/participant/${user.id}/dashboard`} replace />;
+    return <ParticipantDashboard />;
+  }
+
+  if (role !== "PARTICIPANT") return <Navigate to="/dashboard" replace />;
   if (id !== user.id) return <Navigate to={`/participant/${user.id}/dashboard`} replace />;
 
   return <ParticipantDashboard />;
@@ -350,7 +362,16 @@ const ParticipantScopedRoute = ({ children }) => {
 
   if (isChecking) return <div className="admin-loading">Checking access...</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (String(user.role || "").toUpperCase() !== "PARTICIPANT") return <Navigate to="/dashboard" replace />;
+
+  const role = String(user.role || "").toUpperCase();
+  const participantMode = sessionStorage.getItem("nitro_participant_mode") === "1";
+
+  if (role === "SUPER_ADMIN" && participantMode) {
+    if (id !== user.id) return <Navigate to={`/participant/${user.id}/dashboard`} replace />;
+    return <>{children}<Footer variant="teal" /></>;
+  }
+
+  if (role !== "PARTICIPANT") return <Navigate to="/dashboard" replace />;
   if (id !== user.id) return <Navigate to={`/participant/${user.id}/dashboard`} replace />;
 
   return (

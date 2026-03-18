@@ -24,14 +24,26 @@ const S = {
   },
 };
 
-const getRouteForUser = (user) => {
+const getRouteForUser = (user, mode = "admin") => {
   const role = String(user?.role || "").toUpperCase();
   const userId = user?.id;
 
+  // If logging in via participant page and role is ADMIN/SUPER_ADMIN
+  // → set participant mode and go to participant dashboard
+  if (mode === "participant" && (role === "SUPER_ADMIN" || role === "ADMIN")) {
+    sessionStorage.setItem("nitro_participant_mode", "1");
+    return userId ? `/participant/${userId}/dashboard` : "/dashboard";
+  }
+
+  // If logging in via admin page → always clear participant mode
+  if (mode === "admin") {
+    sessionStorage.removeItem("nitro_participant_mode");
+  }
+
   const routes = {
     SUPER_ADMIN: userId ? `/super-admin/${userId}/dashboard` : "/dashboard",
-    ADMIN: userId ? `/admin/${userId}/dashboard` : "/dashboard",
-    BRAND: "/brand/dashboard",
+    ADMIN:       userId ? `/admin/${userId}/dashboard`       : "/dashboard",
+    BRAND:       "/brand/dashboard",
     PARTICIPANT: userId ? `/participant/${userId}/dashboard` : "/dashboard",
   };
 
@@ -61,7 +73,7 @@ const Login = ({ mode = "participant" }) => {
         const user = await verifyBackendUser(token);
         storeToken(token, true);
         clearOauthHash();
-        navigate(getRouteForUser(user), { replace: true });
+        navigate(getRouteForUser(user, mode), { replace: true });
       } catch (err) {
         clearOauthHash();
         setError(err.message || "Google sign-in failed.");
@@ -77,9 +89,24 @@ const Login = ({ mode = "participant" }) => {
     try {
       const token = await signInWithSupabase({ email, password });
       const user = await verifyBackendUser(token);
+      const role = String(user?.role || "").toUpperCase();
+
+      // Admin/Super Admin login page — only ADMIN, SUPER_ADMIN, BRAND allowed
+      // Block PARTICIPANT accounts from using this login page
+      if (mode === "admin" && !["ADMIN", "SUPER_ADMIN", "BRAND"].includes(role)) {
+        setError("This login is for Admin and Super Admin accounts only. Please use the Participant login page.");
+        return;
+      }
+
+      // Participant login page — only PARTICIPANT, ADMIN, SUPER_ADMIN allowed (not BRAND)
+      if (mode === "participant" && role === "BRAND") {
+        setError("Brand accounts cannot log in here. Please contact your administrator.");
+        return;
+      }
+
       storeToken(token, true);
       setPassword("");
-      navigate(getRouteForUser(user), { replace: true });
+      navigate(getRouteForUser(user, mode), { replace: true });
     } catch (err) {
       const msg = String(err?.message || "");
       const low = msg.toLowerCase();
