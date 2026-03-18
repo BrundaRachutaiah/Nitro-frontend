@@ -7,6 +7,8 @@ import {
   signOutFromSupabase,
   verifyBackendUser
 } from "../../lib/auth";
+import ProfileIncompleteModal from "../../components/common/ProfileIncompleteModal";
+import "../../components/common/ProfileIncompleteModal.css";
 import "./Dashboard.css";
 
 
@@ -133,6 +135,11 @@ const Dashboard = () => {
   // ── NEW: Payout reminder popup state (SUPER_ADMIN only) ──────
   const [showPayoutPopup, setShowPayoutPopup]           = useState(false);
   const [payoutPopupDismissed, setPayoutPopupDismissed] = useState(false);
+  // ── Profile incomplete modal (shown before entering Participant View) ──
+  const [showProfileModal, setShowProfileModal]         = useState(false);
+  const [participantProfile, setParticipantProfile]     = useState(null);
+  const [participantPct, setParticipantPct]             = useState(0);
+  const [profileChecking, setProfileChecking]           = useState(false);
   const datePickerRef = useRef(null);
 
 
@@ -462,25 +469,70 @@ const Dashboard = () => {
             <button
               type="button"
               title="View platform as a participant"
-              onClick={() => {
-                sessionStorage.setItem("nitro_participant_mode", "1");
-                navigate(`/participant/${user.id}/dashboard`, { replace: true });
+              disabled={profileChecking}
+              onClick={async () => {
+                if (!user?.id) return;
+                const token = getStoredToken();
+                if (!token) return;
+                setProfileChecking(true);
+                try {
+                  const [pctRes, meRes, paymentRes] = await Promise.all([
+                    fetchJson("/users/me/profile-completion", token),
+                    fetchJson("/users/me", token),
+                    fetchJson("/applications/payment-details", token).catch(() => null),
+                  ]);
+                  const meData      = meRes?.data || {};
+                  const paymentData = paymentRes?.data?.details || {};
+                  const fullProfile = {
+                    ...meData,
+                    address_line1:       paymentData.address_line1       || meData.address_line1       || "",
+                    address_line2:       paymentData.address_line2       || meData.address_line2       || "",
+                    city:                paymentData.city                || meData.city                || "",
+                    state:               paymentData.state               || meData.state               || "",
+                    pincode:             paymentData.pincode             || meData.pincode             || "",
+                    bank_account_name:   paymentData.bank_account_name   || meData.bank_account_name   || "",
+                    bank_account_number: paymentData.bank_account_number || meData.bank_account_number || "",
+                    bank_ifsc:           paymentData.bank_ifsc           || meData.bank_ifsc           || "",
+                    bank_name:           paymentData.bank_name           || meData.bank_name           || "",
+                    pan_number:          paymentData.pan_number          || meData.pan_number          || "",
+                  };
+                  const allFieldsFilled = [
+                    fullProfile.full_name, fullProfile.email,
+                    fullProfile.address_line1, fullProfile.city, fullProfile.state, fullProfile.pincode,
+                    fullProfile.bank_account_name, fullProfile.bank_account_number,
+                    fullProfile.bank_ifsc, fullProfile.bank_name, fullProfile.pan_number,
+                  ].every((v) => String(v || "").trim().length > 0);
+                  setParticipantPct(Number(pctRes?.data?.percentage) || 0);
+                  setParticipantProfile(fullProfile);
+                  if (!allFieldsFilled) {
+                    setShowProfileModal(true);
+                  } else {
+                    sessionStorage.setItem("nitro_participant_mode", "1");
+                    navigate(`/participant/${user.id}/dashboard`);
+                  }
+                } catch {
+                  sessionStorage.setItem("nitro_participant_mode", "1");
+                  navigate(`/participant/${user.id}/dashboard`);
+                } finally {
+                  setProfileChecking(false);
+                }
               }}
               style={{
                 background: "rgba(23,208,242,0.08)",
                 border: "1.5px solid rgba(23,208,242,0.5)",
                 borderRadius: 8, color: "#17d0f2",
                 fontWeight: 700, fontSize: "0.78rem",
-                padding: "7px 14px", cursor: "pointer",
+                padding: "7px 14px", cursor: profileChecking ? "wait" : "pointer",
                 display: "flex", alignItems: "center", gap: 6,
                 whiteSpace: "nowrap",
+                opacity: profileChecking ? 0.6 : 1,
               }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                 <circle cx="12" cy="12" r="3"/>
               </svg>
-              Participant View
+              {profileChecking ? "Checking..." : "Participant View"}
             </button>
           )}
 
@@ -835,6 +887,24 @@ const Dashboard = () => {
 
         </main>
       </div>
+
+      {/* ── Profile Incomplete Modal (shown before entering Participant View) ── */}
+      <ProfileIncompleteModal
+        open={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        onComplete={() => {
+          setShowProfileModal(false);
+          if (user?.id) {
+            // Must set participant mode BEFORE navigating so ParticipantScopedRoute allows SUPER_ADMIN
+            sessionStorage.setItem("nitro_participant_mode", "1");
+            // ?edit=1 auto-opens edit mode on the Profile page
+            navigate(`/participant/${user.id}/profile?edit=1`);
+          }
+        }}
+        profileData={participantProfile}
+        percentage={participantPct}
+        isSuperAdmin={true}
+      />
     </div>
   );
 };

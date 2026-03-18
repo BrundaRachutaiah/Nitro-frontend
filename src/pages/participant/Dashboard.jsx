@@ -8,6 +8,9 @@ import {
   verifyBackendUser
 } from "../../lib/auth";
 import { getActiveCatalog } from "../../api/project.api";
+import { getPaymentDetails } from "../../api/allocation.api";
+import ProfileIncompleteModal from "../../components/common/ProfileIncompleteModal";
+import "../../components/common/ProfileIncompleteModal.css";
 import "./Dashboard.css";
 
 /* ──── Fetch helper ─────────────────────────────────────────────────────── */
@@ -343,6 +346,8 @@ const ParticipantDashboard = () => {
   const [toasts, setToasts]           = useState([]);
   const [notifBell, setNotifBell]     = useState([]);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileData, setProfileData] = useState(null);
   const notifRef = useRef(null);
   const handledNavStateRef = useRef("");
 
@@ -376,17 +381,54 @@ const ParticipantDashboard = () => {
       if (role !== "PARTICIPANT" && role !== "SUPER_ADMIN") throw new Error("Unsupported role.");
       setUser(backendUser);
 
-      const [profileRes, meRes, activeRes, appliedRes, completedRes, catalogRes] = await Promise.all([
+      const [profileRes, meRes, activeRes, appliedRes, completedRes, catalogRes, paymentRes] = await Promise.all([
         fetchJson("/users/me/profile-completion", token),
         fetchJson("/users/me", token),
         fetchJson("/projects/active", token),
         fetchJson("/projects/applied", token),
         fetchJson("/projects/completed", token),
         getActiveCatalog(),
+        getPaymentDetails().catch(() => null),   // non-critical, don't break on failure
       ]);
 
       setUser((prev) => ({ ...(prev || {}), ...(backendUser || {}), ...(meRes?.data || {}) }));
-      setProfileCompletion(Number(profileRes?.data?.percentage) || 0);
+
+      const pct = Number(profileRes?.data?.percentage) || 0;
+      setProfileCompletion(pct);
+
+      // Build a fully merged profile for the modal (basic + address + bank + kyc)
+      const meData        = meRes?.data || {};
+      const paymentData   = paymentRes?.data?.data?.details || paymentRes?.data?.details || {};
+      const fullProfile = {
+        ...meData,
+        // payment-details takes priority for bank/address (more up-to-date)
+        address_line1:       paymentData.address_line1       || meData.address_line1       || "",
+        address_line2:       paymentData.address_line2       || meData.address_line2       || "",
+        city:                paymentData.city                || meData.city                || "",
+        state:               paymentData.state               || meData.state               || "",
+        pincode:             paymentData.pincode             || meData.pincode             || "",
+        country:             paymentData.country             || meData.country             || "India",
+        bank_account_name:   paymentData.bank_account_name   || meData.bank_account_name   || "",
+        bank_account_number: paymentData.bank_account_number || meData.bank_account_number || "",
+        bank_ifsc:           paymentData.bank_ifsc           || meData.bank_ifsc           || "",
+        bank_name:           paymentData.bank_name           || meData.bank_name           || "",
+        pan_number:          paymentData.pan_number          || meData.pan_number          || "",
+      };
+      setProfileData(fullProfile);
+
+      // Show profile incomplete popup if any required fields are missing
+      // Use a small delay so the dashboard renders first
+      const allFieldsFilled = [
+        fullProfile.full_name, fullProfile.email,
+        fullProfile.address_line1, fullProfile.city, fullProfile.state, fullProfile.pincode,
+        fullProfile.bank_account_name, fullProfile.bank_account_number,
+        fullProfile.bank_ifsc, fullProfile.bank_name, fullProfile.pan_number,
+      ].every((v) => String(v || "").trim().length > 0);
+
+      if (!allFieldsFilled) {
+        setTimeout(() => setShowProfileModal(true), 600);
+      }
+
       setActiveProjects(Array.isArray(activeRes?.data) ? activeRes.data : []);
 
       const nextApplied = Array.isArray(appliedRes?.data) ? appliedRes.data : [];
@@ -1232,6 +1274,19 @@ const ParticipantDashboard = () => {
           <span>👤</span><span>Profile</span>
         </button>
       </nav>
+
+      {/* ── Profile Incomplete Modal ── */}
+      <ProfileIncompleteModal
+        open={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        onComplete={() => {
+          setShowProfileModal(false);
+          navigate(path("profile") + "?edit=1");
+        }}
+        profileData={profileData}
+        percentage={profileCompletion}
+        isSuperAdmin={String(user?.role || "").toUpperCase() === "SUPER_ADMIN"}
+      />
     </div>
   );
 };

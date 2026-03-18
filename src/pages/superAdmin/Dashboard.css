@@ -731,6 +731,24 @@
 }
 .su-action-btn--promote:hover { background: rgba(99,102,241,0.2); }
 
+.su-action-btn--super {
+  background: rgba(6,182,212,0.1); border-color: rgba(6,182,212,0.4); color: #06b6d4;
+  font-weight: 700;
+}
+.su-action-btn--super:hover { background: rgba(6,182,212,0.2); border-color: rgba(6,182,212,0.65); box-shadow: 0 0 10px rgba(6,182,212,0.2); }
+
+/* Super Admins stat card — indigo tone */
+.sa-stat-card--indigo { border-color: rgba(99,102,241,0.2); }
+.sa-stat-icon--indigo { background: rgba(99,102,241,0.15); color: #818cf8; }
+.sa-stat-note--indigo { background: rgba(99,102,241,0.12); color: #a5b4fc; }
+
+/* Super tab count badge */
+.su-tab-count--super {
+  background: rgba(99,102,241,0.2);
+  color: #a5b4fc;
+  border: 1px solid rgba(99,102,241,0.35);
+}
+
 /* ── Loading / empty states ── */
 .su-loading-row {
   display: flex; align-items: center; justify-content: center; gap: 10px;

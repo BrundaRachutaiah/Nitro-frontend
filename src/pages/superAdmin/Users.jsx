@@ -73,7 +73,7 @@ const ConfirmModal = ({ message, onConfirm, onCancel }) => (
   <div className="su-modal-overlay">
     <div className="su-modal">
       <div className="su-modal-icon"><Icon name="alert" size={28} /></div>
-      <p className="su-modal-msg">{message}</p>
+      <p className="su-modal-msg" style={{ whiteSpace: "pre-line" }}>{message}</p>
       <div className="su-modal-actions">
         <button type="button" className="sa-date-cancel" onClick={onCancel}>Cancel</button>
         <button type="button" className="su-confirm-btn" onClick={onConfirm}>Confirm</button>
@@ -90,6 +90,7 @@ const Users = () => {
   const [user, setUser]               = useState(null);
   const [participants, setParticipants] = useState([]);
   const [admins, setAdmins]           = useState([]);
+  const [superAdmins, setSuperAdmins] = useState([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState("");
@@ -97,18 +98,22 @@ const Users = () => {
   const [searchTerm, setSearchTerm]   = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [confirm, setConfirm]         = useState(null); // { message, onConfirm }
+  const [confirm, setConfirm]         = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
 
-  /* ── Load ── */
+  /* ── Load all 3 role groups ── */
   const loadUsers = async () => {
     setError(""); setLoading(true);
     try {
       const reqs = [axios.get("/admin/participants")];
-      if (isSuperAdmin) reqs.push(axios.get("/admin/admins"));
-      const [pRes, aRes] = await Promise.all(reqs);
+      if (isSuperAdmin) {
+        reqs.push(axios.get("/admin/admins"));
+        reqs.push(axios.get("/admin/super-admins"));
+      }
+      const [pRes, aRes, saRes] = await Promise.all(reqs);
       setParticipants(Array.isArray(pRes.data?.data) ? pRes.data.data : []);
       setAdmins(Array.isArray(aRes?.data?.data) ? aRes.data.data : []);
+      setSuperAdmins(Array.isArray(saRes?.data?.data) ? saRes.data.data : []);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to load users");
     } finally { setLoading(false); }
@@ -140,10 +145,12 @@ const Users = () => {
 
   const confirmAction = (message, fn) => setConfirm({ message, onConfirm: () => runAction(message, fn) });
 
-  const updateStatus  = (id, action)  => runAction(action, () => axios.patch(`/admin/participants/${id}/${action}`));
-  const deleteUser    = (id)          => confirmAction("Delete this participant permanently?", () => axios.delete(`/admin/participants/${id}`));
-  const promoteAdmin  = (id)          => confirmAction("Promote this participant to Admin?",   () => axios.patch(`/admin/participants/${id}/promote-admin`));
-  const removeAdmin   = (id)          => confirmAction("Remove admin access from this user?",  () => axios.patch(`/admin/admins/${id}/remove-access`));
+  const updateStatus      = (id, action)  => runAction(action, () => axios.patch(`/admin/participants/${id}/${action}`));
+  const deleteUser        = (id)          => confirmAction("Delete this participant permanently?", () => axios.delete(`/admin/participants/${id}`));
+  const promoteAdmin      = (id, name)    => confirmAction(`Promote ${name || "this user"} to Admin?\nThey will have admin-level access to the platform.`, () => axios.patch(`/admin/participants/${id}/promote-admin`));
+  const promoteSuper      = (id, name)    => confirmAction(`Promote ${name || "this user"} to Super Admin?\nThis grants full platform access including user management.`, () => axios.patch(`/admin/participants/${id}/promote-super-admin`));
+  const removeAdmin       = (id, name)    => confirmAction(`Remove admin access from ${name || "this user"}?\nThey will become a Participant.`, () => axios.patch(`/admin/admins/${id}/remove-access`));
+  const demoteSuper       = (id, name)    => confirmAction(`Demote ${name || "this user"} from Super Admin to Admin?`, () => axios.patch(`/admin/super-admins/${id}/demote`));
 
   const handleLogout = async () => {
     const token = getStoredToken();
@@ -153,7 +160,7 @@ const Users = () => {
   };
 
   /* ── Filtered data ── */
-  const currentList = activeTab === "admins" ? admins : participants;
+  const currentList = activeTab === "admins" ? admins : activeTab === "superadmins" ? superAdmins : participants;
   const filteredList = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return currentList.filter((u) => {
@@ -167,11 +174,12 @@ const Users = () => {
 
   /* ── Stats for summary cards ── */
   const stats = useMemo(() => ({
-    total:    participants.length,
-    approved: participants.filter(u => String(u.status||"").toUpperCase() === "APPROVED").length,
-    pending:  participants.filter(u => String(u.status||"").toUpperCase() === "PENDING").length,
-    admins:   admins.length,
-  }), [participants, admins]);
+    total:       participants.length,
+    approved:    participants.filter(u => String(u.status||"").toUpperCase() === "APPROVED").length,
+    pending:     participants.filter(u => String(u.status||"").toUpperCase() === "PENDING").length,
+    admins:      admins.length,
+    superAdmins: superAdmins.length,
+  }), [participants, admins, superAdmins]);
 
   return (
     <div className="sa-dashboard">
@@ -268,10 +276,11 @@ const Users = () => {
           {/* ── Stat Cards ── */}
           <div className="sa-cards">
             {[
-              { title: "Total Participants", value: stats.total,    note: "All registered",    icon: "participants", tone: "blue" },
-              { title: "Approved",           value: stats.approved, note: "Active members",    icon: "check",        tone: "green" },
-              { title: "Pending Approval",   value: stats.pending,  note: "Awaiting review",   icon: "alert",        tone: stats.pending > 0 ? "amber" : "blue" },
-              { title: "Admins",             value: stats.admins,   note: "With admin access", icon: "shield",       tone: "cyan" },
+              { title: "Total Participants", value: stats.total,       note: "All registered",       icon: "participants", tone: "blue" },
+              { title: "Approved",           value: stats.approved,    note: "Active members",       icon: "check",        tone: "green" },
+              { title: "Pending Approval",   value: stats.pending,     note: "Awaiting review",      icon: "alert",        tone: stats.pending > 0 ? "amber" : "blue" },
+              { title: "Admins",             value: stats.admins,      note: "With admin access",    icon: "shield",       tone: "cyan" },
+              { title: "Super Admins",       value: stats.superAdmins, note: "Full platform access", icon: "star",         tone: "indigo" },
             ].map((card, i) => (
               <article
                 key={card.title}
@@ -314,6 +323,17 @@ const Users = () => {
                     <Icon name="shield" size={15} />
                     Admins
                     {admins.length > 0 && <span className="su-tab-count">{admins.length}</span>}
+                  </button>
+                )}
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    className={`su-tab ${activeTab === "superadmins" ? "su-tab--active" : ""}`}
+                    onClick={() => { setActiveTab("superadmins"); setStatusFilter("ALL"); }}
+                  >
+                    <Icon name="star" size={15} />
+                    Super Admins
+                    {superAdmins.length > 0 && <span className="su-tab-count su-tab-count--super">{superAdmins.length}</span>}
                   </button>
                 )}
               </div>
@@ -434,28 +454,54 @@ const Users = () => {
                                   <span>Delete</span>
                                 </button>
                               )}
-                              {/* Make Admin (Super Admin only, Approved) */}
+                              {/* Promote role — Super Admin only, Approved participants */}
                               {isSuperAdmin && activeTab === "participants" && status === "APPROVED" && (
-                                <button
-                                  type="button"
-                                  className="su-action-btn su-action-btn--promote"
-                                  disabled={actionLoading !== null}
-                                  onClick={() => promoteAdmin(u.id)}
-                                >
-                                  <Icon name="star" size={14} />
-                                  <span>Make Admin</span>
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    className="su-action-btn su-action-btn--promote"
+                                    disabled={actionLoading !== null}
+                                    title="Grant admin-level access"
+                                    onClick={() => promoteAdmin(u.id, u.full_name)}
+                                  >
+                                    <Icon name="star" size={14} />
+                                    <span>Make Admin</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="su-action-btn su-action-btn--super"
+                                    disabled={actionLoading !== null}
+                                    title="Grant full super admin access"
+                                    onClick={() => promoteSuper(u.id, u.full_name)}
+                                  >
+                                    <Icon name="shield" size={14} />
+                                    <span>Make Super Admin</span>
+                                  </button>
+                                </>
                               )}
-                              {/* Remove Admin (Admins tab) */}
+                              {/* Admins tab — remove access → demotes to Participant */}
                               {activeTab === "admins" && (
                                 <button
                                   type="button"
                                   className="su-action-btn su-action-btn--danger"
                                   disabled={actionLoading !== null}
-                                  onClick={() => removeAdmin(u.id)}
+                                  onClick={() => removeAdmin(u.id, u.full_name)}
                                 >
                                   <Icon name="shieldOff" size={14} />
                                   <span>Remove Access</span>
+                                </button>
+                              )}
+                              {/* Super Admins tab — demote to Admin */}
+                              {activeTab === "superadmins" && (
+                                <button
+                                  type="button"
+                                  className="su-action-btn su-action-btn--reject"
+                                  disabled={actionLoading !== null}
+                                  title="Demote to Admin role"
+                                  onClick={() => demoteSuper(u.id, u.full_name)}
+                                >
+                                  <Icon name="shieldOff" size={14} />
+                                  <span>Demote to Admin</span>
                                 </button>
                               )}
                             </div>
