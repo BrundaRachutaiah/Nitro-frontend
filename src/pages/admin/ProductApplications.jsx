@@ -295,24 +295,24 @@ const ProductApplications = () => {
                     Approve <strong>{confirmModal.name}</strong>'s application for <strong>{confirmModal.product}</strong>?
                   </div>
                   <div style={{ display: "grid", gap: 10 }}>
-                    <label style={{ display: "grid", gap: 6 }}>
+                    <div style={{ display: "grid", gap: 6 }}>
                       <span className="sa-td-muted">Allocated budget (₹)</span>
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={toAmount(confirmModal.budget)}
-                        onChange={(e) => setConfirmModal((prev) => prev ? ({ ...prev, budget: toAmount(e.target.value) }) : prev)}
+                      <div
                         style={{
                           width: "100%",
                           padding: "10px 12px",
                           borderRadius: 10,
-                          border: "1px solid rgba(255,255,255,0.12)",
-                          background: "rgba(255,255,255,0.04)",
-                          color: "white",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          background: "rgba(255,255,255,0.02)",
+                          color: "var(--green)",
+                          fontWeight: 700,
+                          fontSize: "1.1rem",
+                          letterSpacing: "0.01em",
                         }}
-                      />
-                    </label>
+                      >
+                        {fmtCurrency(toAmount(confirmModal.budget))}
+                      </div>
+                    </div>
 
                     <div className="sa-td-muted" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                       <span>Project budget: <strong style={{ color: "var(--green)" }}>{fmtCurrency(confirmModal.row?.project_budget)}</strong></span>
@@ -327,11 +327,6 @@ const ProductApplications = () => {
 </span>
                     </div>
 
-                    {toAmount(confirmModal.budget) > toAmount(confirmModal.row?.project_remaining_budget) && (
-                      <div className="sa-td-muted" style={{ color: "#ffb020" }}>
-                        Allocated budget exceeds remaining project budget.
-                      </div>
-                    )}
                   </div>
                 </>
               ) : (
@@ -345,10 +340,6 @@ const ProductApplications = () => {
                 className={`su-action-btn ${confirmModal.action === "approve" ? "su-action-btn--approve" : "su-action-btn--reject"}`}
                 disabled={
                   !!workingId
-                  || (confirmModal.action === "approve" && (
-                    toAmount(confirmModal.budget) <= 0
-                    || toAmount(confirmModal.budget) > toAmount(confirmModal.row?.project_remaining_budget)
-                  ))
                 }
                 onClick={() => (confirmModal.action === "approve" ? onApprove(confirmModal.row, confirmModal.budget) : onReject(confirmModal.id))}
               >

@@ -37,6 +37,15 @@
   color: #17d0f2;
 }
 
+.pp-logout {
+  margin-left: 8px;
+  border: 1px solid rgba(255,255,255,0.15) !important;
+  color: #9db7c2 !important;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.pp-logout:hover { border-color: #f87171 !important; color: #fca5a5 !important; }
+
 .participant-payout-main {
   max-width: 1100px;
   margin: 0 auto;

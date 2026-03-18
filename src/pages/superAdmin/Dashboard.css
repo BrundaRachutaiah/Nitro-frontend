@@ -1109,11 +1109,31 @@
 
 /* Products sub-section */
 .pjd-products-section { display: flex; flex-direction: column; gap: 10px; }
-.pjd-products-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.pjd-products-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
 .pjd-product-row {
-  display: grid; grid-template-columns: 1fr 1fr 160px 40px; gap: 8px; align-items: end;
+  display: grid; grid-template-columns: 1fr 1fr 130px 90px 38px; gap: 8px; align-items: end;
 }
 .pjd-remove-btn { height: 38px; width: 38px; padding: 0; justify-content: center; }
+.pjd-vis-btn {
+  height: 38px; padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem; font-weight: 700;
+  cursor: pointer; white-space: nowrap;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  transition: opacity 0.15s, background 0.15s;
+}
+.pjd-vis-btn--visible {
+  background: rgba(34,197,94,0.12);
+  border: 1.5px solid rgba(34,197,94,0.5);
+  color: #22c55e;
+}
+.pjd-vis-btn--visible:hover { background: rgba(34,197,94,0.2); }
+.pjd-vis-btn--hidden {
+  background: rgba(239,68,68,0.1);
+  border: 1.5px solid rgba(239,68,68,0.4);
+  color: #ef4444;
+}
+.pjd-vis-btn--hidden:hover { background: rgba(239,68,68,0.18); }
 .pjd-form-footer { display: flex; gap: 10px; padding-top: 4px; }
 
 /* ── Responsive ── */
@@ -1130,6 +1150,7 @@
   .pjd-info-item--full { grid-column: 1; }
   .pjd-form-grid { grid-template-columns: 1fr; }
   .pjd-product-row { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .pjd-vis-btn { font-size: 0.7rem; padding: 0 8px; }
 }
 /* ══════════════════════════════════════════════════════════════
    Create Project / ProjectForm — CSS additions

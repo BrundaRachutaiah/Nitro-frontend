@@ -221,6 +221,7 @@ const ProjectForm = ({ onSuccess }) => {
                 type="date"
                 className="cpf-input cpf-input--icon cpf-input--date"
                 value={form.start_date}
+                min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
                 onChange={e => set("start_date", e.target.value)}
               />
             </div>
@@ -233,7 +234,11 @@ const ProjectForm = ({ onSuccess }) => {
                 type="date"
                 className="cpf-input cpf-input--icon cpf-input--date"
                 value={form.end_date}
-                min={form.start_date || undefined}
+                min={
+                  form.start_date
+                    ? new Date(new Date(form.start_date).getTime() + 86400000).toISOString().slice(0, 10)
+                    : new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10)
+                }
                 onChange={e => set("end_date", e.target.value)}
               />
             </div>

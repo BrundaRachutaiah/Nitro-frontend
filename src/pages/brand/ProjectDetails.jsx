@@ -15,7 +15,7 @@ const fmtCurrency = (v) => inr.format(Number(v || 0));
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
-const blankProduct = { name: "", product_url: "", price: "" };
+const blankProduct = { name: "", product_url: "", price: "", is_active: true };
 
 /* ─── Icons ── */
 const Icon = ({ name, size = 18 }) => {
@@ -152,7 +152,13 @@ const ProjectDetails = () => {
       end_date:    project.end_date   ? String(project.end_date).slice(0, 10)   : "",
       product_url: project.product_url || "",
       products: Array.isArray(project.project_products) && project.project_products.length
-        ? project.project_products.map((p) => ({ name: p?.name || "", product_url: p?.product_url || "", price: p?.product_value ?? "" }))
+        ? project.project_products.map((p) => ({
+            id:          p?.id || null,
+            name:        p?.name || "",
+            product_url: p?.product_url || "",
+            price:       p?.product_value ?? "",
+            is_active:   p?.is_active !== false,  // treat NULL as active
+          }))
         : [{ ...blankProduct }],
     });
   }, [project]);
@@ -172,23 +178,40 @@ const ProjectDetails = () => {
 
   const onSaveDraft = async () => {
     if (!project?.id) return;
+
+    // Frontend budget guard — cannot set below the original budget
+    const originalBudget = Number(project?.reward || 0);
+    const newBudget      = Number(editForm.reward || 0);
+    if (originalBudget > 0 && newBudget < originalBudget) {
+      setError(`Budget cannot be reduced below ${fmtCurrency(originalBudget)} — the originally set project budget.`);
+      return;
+    }
+
     setSaveBusy(true); setError("");
     try {
       await updateProject(project.id, {
         name: editForm.title, title: editForm.title,
         description: editForm.description, category: editForm.category,
-        reward: Number(editForm.reward || 0), mode: editForm.mode,
+        reward: newBudget, mode: editForm.mode,
         total_units: Number(editForm.total_units || 0),
         start_date: editForm.start_date, end_date: editForm.end_date,
         product_url: editForm.product_url,
         products: editForm.products
-          .map((p) => ({ name: String(p?.name || "").trim(), product_url: String(p?.product_url || "").trim(), price: Number(p?.price || 0), product_value: Number(p?.price || 0) }))
+          .map((p) => ({
+            ...(p.id ? { id: p.id } : {}),
+            name:          String(p?.name || "").trim(),
+            product_url:   String(p?.product_url || "").trim(),
+            price:         Number(p?.price || 0),
+            product_value: Number(p?.price || 0),
+            is_active:     p?.is_active !== false,  // false only if explicitly hidden
+          }))
           .filter((p) => p.name && p.product_url),
       });
       await refreshProject();
       setIsEditing(false);
-    } catch (err) { setError(err.response?.data?.message || "Failed to save draft."); }
-    finally { setSaveBusy(false); }
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to save changes.");
+    } finally { setSaveBusy(false); }
   };
 
   const updateEditProduct = (idx, key, val) =>
@@ -340,14 +363,14 @@ const ProjectDetails = () => {
                 {/* Action buttons */}
                 {isAdmin && (
                   <div className="pjd-actions">
-                    {isSuperAdmin && isDraft && (
+                    {isSuperAdmin && (
                       <button
                         type="button"
                         className={`su-action-btn ${isEditing ? "su-action-btn--reject" : "su-action-btn--ghost"}`}
                         onClick={() => setIsEditing(v => !v)}
                       >
                         <Icon name="edit" size={14} />
-                        <span>{isEditing ? "Cancel Edit" : "Edit Draft"}</span>
+                        <span>{isEditing ? "Cancel Edit" : "Edit Project"}</span>
                       </button>
                     )}
                     <button
@@ -372,13 +395,13 @@ const ProjectDetails = () => {
                 )}
               </div>
 
-              {/* ── Edit Draft form ── */}
-              {isSuperAdmin && isEditing && isDraft && (
+              {/* ── Edit form ── */}
+              {isSuperAdmin && isEditing && (
                 <div className="sa-panel">
                   <div className="sa-panel-head">
                     <div>
-                      <h2 className="sa-panel-title">Edit Draft Project</h2>
-                      <p className="sa-panel-sub">Changes will be saved as draft until published</p>
+                      <h2 className="sa-panel-title">Edit Project</h2>
+                      <p className="sa-panel-sub">{isDraft ? "Changes will be saved as draft until published" : "Changes will update the live project immediately"}</p>
                     </div>
                     <Icon name="edit" size={18} />
                   </div>
@@ -389,15 +412,44 @@ const ProjectDetails = () => {
                         onChange={e => setEditForm(p => ({ ...p, title: e.target.value }))} />
                       <FormInput label="Category" placeholder="Category" value={editForm.category}
                         onChange={e => setEditForm(p => ({ ...p, category: e.target.value }))} />
-                      <FormInput label="Budget (INR)" type="number" placeholder="0" value={editForm.reward}
-                        onChange={e => setEditForm(p => ({ ...p, reward: e.target.value }))} />
+
+                      {/* Budget with minimum guard */}
+                      <div className="pjd-field">
+                        <label className="pjd-label">
+                          Budget (INR)
+                        </label>
+                        <input
+                          className="pjd-input"
+                          type="number"
+                          placeholder="0"
+                          value={editForm.reward}
+                          min={Number(project?.reward || 0)}
+                          onChange={e => setEditForm(p => ({ ...p, reward: e.target.value }))}
+                          style={
+                            Number(editForm.reward || 0) < Number(project?.reward || 0)
+                              ? { borderColor: "#ef4444" } : {}
+                          }
+                        />
+                        {Number(editForm.reward || 0) < Number(project?.reward || 0) && (
+                          <span style={{ fontSize: "0.78rem", color: "#ef4444", marginTop: 4, display: "block" }}>
+                            ⚠ Cannot go below {fmtCurrency(project?.reward || 0)}
+                          </span>
+                        )}
+                      </div>
+
                       <FormSelect label="Mode" value={editForm.mode} onChange={e => setEditForm(p => ({ ...p, mode: e.target.value }))}>
                         <option value="MARKETPLACE">MARKETPLACE</option>
                         <option value="D2C">D2C</option>
                       </FormSelect>
                       <FormInput label="Start Date" type="date" value={editForm.start_date}
-                        onChange={e => setEditForm(p => ({ ...p, start_date: e.target.value }))} />
+                        min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
+                        onChange={e => setEditForm(p => ({ ...p, start_date: e.target.value, end_date: "" }))} />
                       <FormInput label="End Date" type="date" value={editForm.end_date}
+                        min={
+                          editForm.start_date
+                            ? new Date(new Date(editForm.start_date).getTime() + 86400000).toISOString().slice(0, 10)
+                            : new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10)
+                        }
                         onChange={e => setEditForm(p => ({ ...p, end_date: e.target.value }))} />
                       <FormInput label="Primary Product URL (optional)" placeholder="https://…" value={editForm.product_url}
                         onChange={e => setEditForm(p => ({ ...p, product_url: e.target.value }))}
@@ -410,7 +462,12 @@ const ProjectDetails = () => {
 
                     <div className="pjd-products-section">
                       <div className="pjd-products-head">
-                        <h4 className="sa-panel-title" style={{ fontSize: "0.9rem" }}>Products</h4>
+                        <div>
+                          <h4 className="sa-panel-title" style={{ fontSize: "0.9rem" }}>Products</h4>
+                          <p style={{ margin: "2px 0 0", fontSize: "0.78rem", color: "var(--text-muted, #9aa3b2)" }}>
+                            Use the eye toggle to show/hide a product from participants
+                          </p>
+                        </div>
                         <button type="button" className="su-action-btn su-action-btn--approve"
                           onClick={() => setEditForm(p => ({ ...p, products: [...p.products, { ...blankProduct }] }))}>
                           <Icon name="plus" size={13} /> Add Product
@@ -418,25 +475,71 @@ const ProjectDetails = () => {
                       </div>
 
                       {editForm.products.map((prod, idx) => (
-                        <div key={`ep-${idx}`} className="pjd-product-row">
+                        <div key={`ep-${idx}`} className="pjd-product-row" style={{
+                          opacity: prod.is_active === false ? 0.55 : 1,
+                          borderLeft: `3px solid ${prod.is_active === false ? "#ef4444" : "transparent"}`,
+                          paddingLeft: 8,
+                          transition: "opacity 0.2s, border-color 0.2s",
+                        }}>
                           <FormInput placeholder="Product Name" value={prod.name}
                             onChange={e => updateEditProduct(idx, "name", e.target.value)} />
                           <FormInput placeholder="Product URL" value={prod.product_url}
                             onChange={e => updateEditProduct(idx, "product_url", e.target.value)} />
                           <FormInput type="number" placeholder="Price (INR)" value={prod.price}
                             onChange={e => updateEditProduct(idx, "price", e.target.value)} />
+
+                          {/* Visibility toggle button */}
+                          <button
+                            type="button"
+                            className={`pjd-vis-btn ${prod.is_active === false ? "pjd-vis-btn--hidden" : "pjd-vis-btn--visible"}`}
+                            title={prod.is_active === false ? "Hidden from participants — click to show" : "Visible to participants — click to hide"}
+                            onClick={() => updateEditProduct(idx, "is_active", prod.is_active === false)}
+                          >
+                            {prod.is_active === false ? (
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                              </svg>
+                            ) : (
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                              </svg>
+                            )}
+                            {prod.is_active === false ? "Hidden" : "Visible"}
+                          </button>
+
                           <button type="button" className="su-action-btn su-action-btn--danger pjd-remove-btn"
                             onClick={() => setEditForm(p => ({ ...p, products: p.products.length > 1 ? p.products.filter((_, i) => i !== idx) : p.products }))}>
                             <Icon name="trash" size={14} />
                           </button>
                         </div>
                       ))}
+
+                      {editForm.products.some(p => p.is_active === false) && (
+                        <div style={{
+                          marginTop: 10, padding: "10px 14px", borderRadius: 8,
+                          background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
+                          fontSize: "0.82rem", color: "#ef4444",
+                        }}>
+                          ⚠ {editForm.products.filter(p => p.is_active === false).length} product(s) hidden — not visible to participants.
+                        </div>
+                      )}
                     </div>
 
                     <div className="pjd-form-footer">
-                      <button type="button" className="pj-create-btn" onClick={onSaveDraft} disabled={saveBusy}>
+                      <button
+                        type="button"
+                        className="pj-create-btn"
+                        onClick={onSaveDraft}
+                        disabled={
+                          saveBusy ||
+                          Number(editForm.reward || 0) < Number(project?.reward || 0)
+                        }
+                      >
                         <Icon name="save" size={15} />
-                        <span>{saveBusy ? "Saving…" : "Save Draft"}</span>
+                        <span>{saveBusy ? "Saving…" : isDraft ? "Save Draft" : "Save Changes"}</span>
                       </button>
                       <button type="button" className="sa-export-btn" onClick={() => setIsEditing(false)} disabled={saveBusy}>
                         Cancel
@@ -465,12 +568,14 @@ const ProjectDetails = () => {
                         <th>Product Name</th>
                         <th>Product URL</th>
                         <th>Price (INR)</th>
+                        <th>Visibility</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(project.project_products || []).length > 0 ? (
                         project.project_products.map((prod) => (
-                          <tr key={prod.id} className="sa-table-row--clickable">
+                          <tr key={prod.id} className="sa-table-row--clickable"
+                              style={{ opacity: prod.is_active === false ? 0.55 : 1 }}>
                             <td className="sa-td-main">{prod.name || "—"}</td>
                             <td>
                               {prod.product_url ? (
@@ -482,11 +587,26 @@ const ProjectDetails = () => {
                             <td className="sa-td-bold" style={{ color: "var(--green)" }}>
                               {fmtCurrency(prod.product_value || 0)}
                             </td>
+                            <td>
+                              {prod.is_active === false ? (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4,
+                                  padding: "3px 10px", borderRadius: 20, fontSize: "0.78rem",
+                                  fontWeight: 700, background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
+                                  Hidden
+                                </span>
+                              ) : (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4,
+                                  padding: "3px 10px", borderRadius: 20, fontSize: "0.78rem",
+                                  fontWeight: 700, background: "rgba(34,197,94,0.1)", color: "#22c55e" }}>
+                                  Visible
+                                </span>
+                              )}
+                            </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={3} className="sa-td-empty">
+                          <td colSpan={4} className="sa-td-empty">
                             <div className="su-empty-state">
                               <Icon name="package" size={28} />
                               <p>No products found for this project.</p>

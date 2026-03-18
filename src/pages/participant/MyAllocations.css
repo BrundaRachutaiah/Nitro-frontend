@@ -54,6 +54,14 @@
 .ma-nav button:hover { color: #cce8f5; background: rgba(255,255,255,0.06); }
 .ma-nav button.active { color: #17d0f2; background: rgba(23,208,242,0.1); }
 
+.ma-logout {
+  margin-left: 8px;
+  border: 1px solid rgba(255,255,255,0.15) !important;
+  background: transparent !important;
+  color: #7db3c8 !important;
+}
+.ma-logout:hover { border-color: #f87171 !important; color: #fca5a5 !important; background: transparent !important; }
+
 /* ── Main ── */
 .ma-main {
   max-width: 1080px;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../../api/axiosInstance";
+import { clearStoredTokens, getStoredToken, signOutFromSupabase } from "../../lib/auth";
 import "./PayoutStatus.css";
 
 const formatCurrency = (value) =>
@@ -117,6 +118,13 @@ const PayoutStatus = () => {
 
   const hasPayoutRecords = data.length > 0;
 
+  const handleLogout = async () => {
+    const token = getStoredToken();
+    await signOutFromSupabase(token);
+    clearStoredTokens();
+    navigate("/login", { replace: true });
+  };
+
   return (
     <div className="participant-payout-page">
       <header className="participant-payout-topbar">
@@ -125,6 +133,7 @@ const PayoutStatus = () => {
           <button type="button" onClick={() => navigate(P.dash)}>Dashboard</button>
           <button type="button" onClick={() => navigate(P.tasks)}>My Tasks</button>
           <button type="button" className="active" onClick={() => navigate(P.payouts)}>Payouts</button>
+          <button type="button" className="pp-logout" onClick={handleLogout}>Logout</button>
         </nav>
       </header>
 

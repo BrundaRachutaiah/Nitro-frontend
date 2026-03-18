@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { cancelAllocation, getMyAllocationTracking, updateAllocationStatus } from "../../api/allocation.api";
 import { uploadPurchaseProof } from "../../api/verification.api";
 import { submitReview, uploadReviewProofs } from "../../api/participant.api";
+import { clearStoredTokens, getStoredToken, signOutFromSupabase } from "../../lib/auth";
 import "./MyAllocations.css";
 
 const PURCHASE_KEY_PREFIX = "nitro_purchased_";
@@ -358,20 +359,32 @@ const MyAllocations = () => {
     [data]
   );
 
-  const active = activeAllocations[0] || data[0] || null;
-
   const viewData = showHistory ? historyData : (activeAllocations.length > 0 ? activeAllocations : []);
+
+  // On history tab use the first historical alloc; on tasks tab use the first active alloc
+  const active = showHistory
+    ? (historyData[0] || data[0] || null)
+    : (activeAllocations[0] || data[0] || null);
+
+  const handleLogout = async () => {
+    const token = getStoredToken();
+    await signOutFromSupabase(token);
+    clearStoredTokens();
+    navigate("/login", { replace: true });
+  };
 
   const products = useMemo(() => {
     const all = [];
-    for (const alloc of activeAllocations) {
+    // Use viewData so history tab shows the historical alloc's products
+    const source = showHistory ? historyData : activeAllocations;
+    for (const alloc of source) {
       const prods = Array.isArray(alloc.selected_products) ? alloc.selected_products : [];
       for (const p of prods) {
         all.push({ ...p, _allocationId: alloc.id });
       }
     }
     return all;
-  }, [activeAllocations]);
+  }, [activeAllocations, historyData, showHistory]);
 
   const status = String(active?.status || "RESERVED").toUpperCase();
 
@@ -478,7 +491,9 @@ const MyAllocations = () => {
 
   const history = useMemo(() => {
     const rows = [];
-    for (const alloc of activeAllocations) {
+    // Build from ALL allocations — active and historical — so history tab is complete
+    const source = showHistory ? data : activeAllocations;
+    for (const alloc of source) {
       const prods = Array.isArray(alloc?.selected_products) ? alloc.selected_products : [null];
       prods.forEach((p, i) => {
         const proof    = p?.purchase_proof    || (p === null ? alloc?.purchase_proof    : null);
@@ -492,7 +507,7 @@ const MyAllocations = () => {
       });
     }
     return rows.sort((a, b) => new Date(b.at) - new Date(a.at));
-  }, [activeAllocations]);
+  }, [activeAllocations, data, showHistory]);
 
   const chipColor = (s) => ({
     APPROVED: "#22c55e", PENDING: "#f59e0b", REJECTED: "#ef4444",
@@ -519,6 +534,7 @@ const MyAllocations = () => {
           <button type="button" className={!showHistory ? "active" : ""} onClick={() => navigate(P.tasks)}>My Tasks</button>
           <button type="button" className={showHistory ? "active" : ""} onClick={() => navigate(P.history)}>History</button>
           <button type="button" onClick={() => navigate(P.payouts)}>Payouts</button>
+          <button type="button" className="ma-logout" onClick={handleLogout}>Logout</button>
         </nav>
       </header>
 
